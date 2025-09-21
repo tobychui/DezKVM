@@ -70,6 +70,25 @@ Each of the parts can be used independently with or without the other part of th
 
 
 
+### Video Capture Configs
+
+By default, MS2109 HDMI capture card support the following resolutions. If you are connecting to your RemdesKVM via the internet (not recommended), pick a resolution and fps combination that best fit your network **upload** bandwidth. If you are using your RemdesKVM within your internal management network, you can just pick the FHD 25 / 30fps option since local area network are at least 100mbps at the time of writing.
+
+```
+// FHD
+1920 x 1080 30fps = 50Mbps
+1920 x 1080 25fps = 40Mbps
+1920 x 1080 20fps = 30Mbps
+1920 x 1080 10fps = 15Mbps
+
+// HD
+1360 x 768 60fps = 28Mbps
+1360 x 768 30fps = 25Mbps
+1360 x 768 25fps = 20Mbps
+1360 x 768 20fps = 18Mbps
+1360 x 768 10fps = 10Mbps
+```
+
 
 
 ## Change Log
