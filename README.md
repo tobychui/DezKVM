@@ -1,6 +1,6 @@
 ![usb-kvm](img/README/usb-kvm.jpg)
 
-# RemdesKVM
+# DezuKVM
 
 Budget IP-KVM designed for my SFF homelab / minilab setup.  I build this just because I don't really trust those off-the-shelf KVMs and Pi-KVM is a bit too expensive if I want to have one KVM device per computer in my homelab cluster. 
 
