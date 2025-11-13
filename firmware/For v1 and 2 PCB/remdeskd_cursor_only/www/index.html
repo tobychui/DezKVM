@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A basic Hello World HTML page with metadata and OpenGraph headers">
+    <meta name="author" content="Your Name">
+    <title>Hello World</title>
+    
+    <!-- OpenGraph Metadata -->
+    <meta property="og:title" content="Hello World">
+    <meta property="og:description" content="A basic Hello World HTML page with metadata and OpenGraph headers">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="http://example.com">
+    <meta property="og:image" content="http://example.com/image.jpg">
+</head>
+<body>
+    <h1>Hello World</h1>
+    <p>Click start to start connection to backend and start Capture to start KVM-ing</p>
+    <button id="startButton">Start</button>
+    <button id="stopButton">Stop</button>
+    <button id="capture">Capture</button>
+    <button id="screenshot">Win + Shift + S</button>
+    <script>
+        let socket;
+        let protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        let port = window.location.port ? window.location.port : (protocol === 'wss' ? 443 : 80);
+        let socketURL = `${protocol}://${window.location.hostname}:${port}/hid`;
+        
+        /* Mouse */
+        document.getElementById('capture').addEventListener('click', function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            // Remove old listeners if they exist
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mousedown', handleMouseDown);
+            document.removeEventListener('mouseup', handleMouseUp);
+            document.removeEventListener('wheel', handleScroll);
+
+            // Add new listeners
+            document.body.requestPointerLock();
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mousedown', handleMouseDown);
+            document.addEventListener('mouseup', handleMouseUp);
+            document.addEventListener('wheel', handleScroll);
+
+            if (socket) {
+                // Reset USBKVM state to avoid stuck keys
+                socket.send(JSON.stringify({ t: 'reset'}));
+            }
+        });
+
+        function handleMouseDown(event) {
+            console.log(`Mouse button pressed: Button=${event.button}`);
+            if (socket) {
+                socket.send(JSON.stringify({ t: 'mw', s: 'md', d: event.button+"" }));
+            }
+        }
+
+        function handleMouseUp(event) {
+            console.log(`Mouse button released: Button=${event.button}`);
+            if (socket) {
+                socket.send(JSON.stringify({ t: 'mw', s: 'mu', d: event.button+"" }));
+            }
+        }
+
+        function handleScroll(event) {
+            console.log(`Mouse scrolled: DeltaX=${event.deltaX}, DeltaY=${event.deltaY}`);
+            if (socket) {
+                socket.send(JSON.stringify({ t: 'ms', y: event.deltaY }));
+            }
+        }
+
+        document.addEventListener('pointerlockchange', function() {
+            if (document.pointerLockElement === document.body) {
+                console.log('Pointer locked');
+            } else {
+                console.log('Pointer unlocked');
+                document.removeEventListener('mousemove', handleMouseMove);
+            }
+        });
+
+        function handleMouseMove(event) {
+            console.log(`Mouse moved: X=${event.movementX}, Y=${event.movementY}`);
+            if (socket) {
+                socket.send(JSON.stringify({ t: 'mm', x: event.movementX, y: event.movementY }));
+            }
+        }
+        
+        /* Keyboard */
+        document.getElementById('startButton').addEventListener('click', function() {
+            const socketUrl = socketURL;
+            socket = new WebSocket(socketUrl);
+
+            socket.addEventListener('open', function(event) {
+                console.log('WebSocket is connected.');
+            });
+
+            socket.addEventListener('message', function(event) {
+                console.log('Message from server ', event.data);
+            });
+
+            document.addEventListener('keydown', handleKeyDown);
+            document.addEventListener('keyup', handleKeyUp);
+        });
+
+        document.getElementById('stopButton').addEventListener('click', function() {
+            if (socket) {
+                socket.close();
+                console.log('WebSocket is disconnected.');
+            }
+
+            document.removeEventListener('keydown', handleKeyDown);
+            document.removeEventListener('keyup', handleKeyUp);
+        });
+
+        document.getElementById('screenshot').addEventListener('click', function() {
+            if (socket) {
+                // Send keydown for Shift
+                socket.send(JSON.stringify({ t: 'kw', s: 'kd', d: 'LEFT_Shift' }));
+                // Send keydown for Windows key
+                socket.send(JSON.stringify({ t: 'kw', s: 'kd', d: 'Meta' }));
+                // Send keydown for S
+                socket.send(JSON.stringify({ t: 'kw', s: 'kd', d: 's' }));
+                
+                setTimeout(function() {
+                    // Send keyup for S
+                    socket.send(JSON.stringify({ t: 'kw', s: 'ku', d: 's' }));
+                    // Send keyup for Windows key
+                    socket.send(JSON.stringify({ t: 'kw', s: 'ku', d: 'Meta' }));
+                    // Send keyup for Shift
+                    socket.send(JSON.stringify({ t: 'kw', s: 'ku', d: 'LEFT_Shift' }));
+                }, 1000);
+            }
+        });
+
+        function isNumpadEvent(event) {
+            return event.location === 3;
+        }
+
+        function handleKeyDown(event) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            const key = event.key;
+            if (socket){
+                if (key == "Shift" || key == "Control" || key == "Alt"){
+                    if (event.location == 1){
+                        socket.send(JSON.stringify({ t: 'kw', s: 'kd', d: "LEFT_" + key }));
+                    } else {
+                        socket.send(JSON.stringify({ t: 'kw', s: 'kd', d:  "RIGHT_" + key }));
+                    }
+                }else if (isNumpadEvent(event)){
+                    socket.send(JSON.stringify({ t: 'kw', s: 'kd', d: "NUMPAD_" + key }));
+                }else if (key == "PrintScreen"){
+                    //Do nothing, press is hardware offloaded
+                }else{
+                    socket.send(JSON.stringify({ t: 'kw', s: 'kd', d: key }));
+                }
+            }
+        }
+
+        function handleKeyUp(event) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            const key = event.key;
+            if (socket) {
+                if (key == "Shift" || key == "Control" || key == "Alt") {
+                    if (event.location == 1) {
+                        socket.send(JSON.stringify({ t: 'kw', s: 'ku', d: "LEFT_" + key }));
+                    } else {
+                        socket.send(JSON.stringify({ t: 'kw', s: 'ku', d: "RIGHT_" + key }));
+                    }
+                }else if (isNumpadEvent(event)){
+                    socket.send(JSON.stringify({ t: 'kw', s: 'ku', d: "NUMPAD_" + key }));
+                }else if (key == "NumLock" || key == "Pause"){
+                   //Do nothing, release is hardware offloaded
+                } else {
+                    socket.send(JSON.stringify({ t: 'kw', s: 'ku', d: key }));
+                }
+            }
+        }
+
+        
+    </script>
+</body>
+</html>

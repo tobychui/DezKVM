@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>DezuKVM | Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/semantic.min.css" integrity="sha512-ySrYzxj+EI1e9xj/kRYqeDL5l1wW0IWY8pzHNTIZ+vc1D3Z14UDNPbwup4yOUmlRemYjgUXsUZ/xvCQU2ThEAw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/semantic.min.js" integrity="sha512-Y/wIVu+S+XJsDL7I+nL50kAVFLMqSdvuLqF2vMoRqiMkmvcqFjEpEgeu6Rx8tpZXKp77J8OUpMKy0m3jLYhbbw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+        
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+        body {
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f5f5f5;
+            color: #222;
+        }
+        .login-container {
+            background: #fff;
+            padding: 2rem 2.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+            min-width: 420px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: #181a1b !important;
+                color: #f1f1f1 !important;
+            }
+            .login-container {
+                background: #23272a;
+                box-shadow: 0 2px 16px rgba(0,0,0,0.32);
+            }
+            .login-container .error-message {
+                background: #3a2323;
+                color: #ffb3b3;
+                border-color: #a94442;
+            }
+            input, .ui.input > input {
+                background: #181a1b !important;
+                color: #f1f1f1 !important;
+                border-color: #444 !important;
+            }
+
+            .ui.basic.button {
+                background: #23272a !important;
+                color: #f1f1f1 !important;
+                border-color: #444 !important;
+            }
+            .ui.basic.button:hover,
+            .ui.basic.button:focus {
+                background: #181a1b !important;
+                color: #fff !important;
+                border-color: #666 !important;
+            }
+        }
+        .login-container form {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .login-container .error-message {
+            margin-top: 1rem;
+            color: #d32f2f;
+            background: #ffeaea;
+            border: 1px solid #f5c6cb;
+            border-radius: 4px;
+            padding: 0.5rem;
+            width: 100%;
+            text-align: center;
+            display: none;
+        }
+
+        i.blue.icon.icon.icon.icon.icon.icon{
+            color: #0a6ef5 !important;
+        }
+    </style>
+   
+</head>
+<body>
+    <div class="login-container ui basic segment">
+        <img src="img/font_logo.svg" alt="dezuKVM Logo" style="width: 150px; margin-bottom: 1rem;">
+        <p>Enter your password to access your IP-KVM</p>
+        <form id="loginForm" autocomplete="off">
+            <div class="ui action input" style="width:100%;">
+                <input type="password" id="password" name="password" placeholder="Password" required autofocus>
+                <button type="button" class="ui basic icon button" id="togglePassword" tabindex="-1">
+                    <i class="ui eye icon" id="eyeIcon"></i>
+                </button>
+            </div>
+            <button class="ui basic button" type="submit"><i class="ui blue sign in alternate icon"></i> Login</button>
+        </form>
+        <div style="width:100%; margin-top: 1rem; display: flex; justify-content: space-between; font-size: 0.95em;">
+            <div>
+            <div class="ui breadcrumb">
+                <a href="/forgot-password.html" class="section">Forgot Password?</a>
+                <div class="divider"> / </div>
+                <a href="https://dezukvm.com" target="_blank" rel="noopener" class="section">DezuKVM</a>
+            </div>
+            </div>
+        </div>
+        <div class="error-message" id="errorMsg"></div>
+    </div>
+    <script>
+        // $cjax wrapper example (assumes similar to $.ajax)
+        function $cjax(options) {
+            var csrfToken = $('meta[name="csrf_token"]').attr('content');
+            if (!options.headers) options.headers = {};
+            options.headers['X-CSRF-Token'] = csrfToken;
+            return $.ajax(options);
+        }
+
+        $(function() {
+            $('#loginForm').on('submit', function(e) {
+                e.preventDefault();
+                $('#errorMsg').hide();
+                var password = $('#password').val();
+                $cjax({
+                    url: '/api/v1/login',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ password: password }),
+                    success: function(resp, status, xhr) {
+                        if (xhr.status === 200 && !(resp && resp.error)) {
+                            window.location.href = 'index.html';
+                        } else {
+                            var msg = resp && resp.error ? resp.error : 'Login failed.';
+                            $('#errorMsg').text(msg).show();
+                        }
+                    },
+                    error: function(xhr) {
+                        var msg = 'Login failed.';
+                        if (xhr.responseJSON && xhr.responseJSON.error) {
+                            msg = xhr.responseJSON.error;
+                        }
+                        $('#errorMsg').text(msg).show();
+                    }
+                });
+            });
+        });
+
+         $('#togglePassword').on('click', function() {
+            var input = $('#password');
+            var icon = $('#eyeIcon');
+            if (input.attr('type') === 'password') {
+                input.attr('type', 'text');
+                icon.removeClass('eye').addClass('eye slash');
+            } else {
+                input.attr('type', 'password');
+                icon.removeClass('eye slash').addClass('eye');
+            }
+        });
+    </script>
+</body>
+</html>

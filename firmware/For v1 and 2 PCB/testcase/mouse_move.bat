@@ -1,0 +1,12 @@
+@echo off
+:: Move down x_value, y_value, x_positive, y_positive
+.\send.exe COM4 115200 0x03 0x00 0x80 0x00 0x00
+timeout /t 1 /nobreak >nul
+:: Move up
+.\send.exe COM4 115200 0x03 0x00 0x80 0x00 0x01
+timeout /t 1 /nobreak >nul
+:: Move right
+.\send.exe COM4 115200 0x03 0x80 0x00 0x00 0x00
+timeout /t 1 /nobreak >nul
+:: Move left
+.\send.exe COM4 115200 0x03 0x80 0x00 0x01 0x00

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <meta name="description" content="DezuKVM | Local Mode">
+        <meta name="author" content="dezukvm.aroz.org">
+        <title>DezuKVM | Local Mode</title>
+        <!-- Tocas UI -->
+        <link rel="stylesheet" href="tocas/tocas.min.css">
+        <script src="tocas/tocas.min.js"></script>
+
+        <!-- Noto Sans TC (local) -->
+        <style>
+            @font-face {
+            font-family: 'Noto Sans TC';
+            src: url('./tocas/NotoSansTc-VariableFont_wght.ttf') format('truetype');
+            font-weight: 100 200 300 400 500 600 700;
+            font-style: normal;
+            font-display: swap;
+            }
+        </style>
+
+        <style>
+            body {
+                margin: 0;
+                padding: 0;
+                height: 100vh;
+                width: 100vw;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                box-sizing: border-box;
+                overflow: hidden;
+                background-color: black;
+                font-family: 'Noto Sans TC';
+            }
+            
+
+            #video {
+                max-width: 100vw;
+                max-height: 100vh;
+                width: auto;
+                height: auto;
+                display: block;
+                margin: auto;
+                object-fit: contain;
+                z-index: 0;
+            }
+
+            #menu {
+                position: fixed;
+                top: 0px;
+                left: 50%;
+                width: 80%;
+                transform: translateX(-50%);
+                padding: 0.4em;
+                display: flex;
+                gap: 3px;
+                z-index: 1000;
+
+                background-color: rgba(255,255,255,0.7);
+                border-bottom-left-radius: 10px;
+                border-bottom-right-radius: 10px;
+            }
+
+        @media (max-width: 1280px) {
+            #menu {
+                width: calc(100% - 1em);
+            }
+        }
+
+            #touchscreen {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                z-index: 500;
+            }
+        </style>
+    </head>
+<body>
+    <div id="menu">
+        <div class="ts-image">
+            <img src="img/logo.svg" width="120" style="margin-top:-6px;">
+        </div>
+        <!-- Select video feed -->
+        <div class="ts-select is-small has-start-spaced-small"> 
+            <select id="videoSource"></select>
+        </div>
+        <button id="refreshCameras" class="ts-button is-icon is-small"><span class="ts-icon is-arrows-rotate-icon"></span></button>
+        <!-- Select audio feed -->
+        <div class="ts-select is-small has-start-spaced-small"> 
+            <select id="audioSource"></select>
+        </div>
+        <button id="refreshAudioSources" class="ts-button is-icon is-small"><span class="ts-icon is-arrows-rotate-icon"></span></button>
+        <!-- Serial Ports -->
+        <button id="selectSerialPort"  class="ts-button is-icon is-small has-start-spaced-small"><span class="ts-icon is-keyboard-icon"></span></button>
+        <span id="selectedPort" class="has-start-spaced-small" style="margin-top: 0.1em;"> Not Connected</span>
+        <!-- Fullscreen -->
+        <button id="fullscreenBtn" class="ts-button is-icon is-small has-start-spaced-small"><span class="ts-icon is-maximize-icon"></span></button>
+    
+        <!-- Software HID reset -->
+        <button id="resetHIDBtn" class="ts-button is-small is-negative has-start-spaced-small" style="margin-left:auto;">Reset HID</button>
+        <!-- Hide menu button -->
+        <button id="hideMenuBtn" class="ts-button is-icon is-small" style="margin-left:auto;"><span class="ts-icon is-chevron-up-icon"></span></button>
+    </div>
+    <video id="video" autoplay playsinline style="width:100%;max-width:100%;"></video>
+    <div id="touchscreen"></div>
+    
+    <script src="local-kvm.js"></script>
+    <script>
+        const menu = document.getElementById('menu');
+        const hideMenuBtn = document.getElementById('hideMenuBtn');
+
+        // Hide menu when button is clicked
+        hideMenuBtn.addEventListener('click', () => {
+            menu.style.display = 'none';
+            showMenuBtn.style.display = 'block';
+        });
+
+        // Create a show menu button
+        const showMenuBtn = document.createElement('button');
+        showMenuBtn.id = 'showMenuBtn';
+        showMenuBtn.className = 'ts-button is-icon is-small';
+        showMenuBtn.style.position = 'fixed';
+        showMenuBtn.style.top = '0.5em';
+        showMenuBtn.style.right = '0.5em';
+        showMenuBtn.style.zIndex = '1001';
+        showMenuBtn.style.display = 'none';
+        showMenuBtn.innerHTML = '<span class="ts-icon is-chevron-down-icon"></span>';
+        document.body.appendChild(showMenuBtn);
+
+        // Show menu when show button is clicked
+        showMenuBtn.addEventListener('click', () => {
+            menu.style.display = 'flex';
+            showMenuBtn.style.display = 'none';
+        });
+    </script>
+</body>
+</html>

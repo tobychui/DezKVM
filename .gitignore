@@ -37,3 +37,6 @@ usbkvm-app/key.pem
 dezukvmd/config/uuid.cfg
 dezukvmd/config/usbkvm.json
 dezukvmd/dezukvmd
+tools/usbkvm-app/key.pem
+tools/usbkvm-app/cert.pem
+/src/dezukvmd/config

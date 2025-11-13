@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>No Session | DezuKVM</title>
+        <meta name="csrf_token" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="dezukvm.csrf.token" content="{{.csrfToken}}">
+        <link rel="icon" type="image/png" href="/favicon.png">
+        <script src="js/jquery-3.7.1.min.js"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/semantic.min.css" integrity="sha512-ySrYzxj+EI1e9xj/kRYqeDL5l1wW0IWY8pzHNTIZ+vc1D3Z14UDNPbwup4yOUmlRemYjgUXsUZ/xvCQU2ThEAw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/semantic.min.js" integrity="sha512-Y/wIVu+S+XJsDL7I+nL50kAVFLMqSdvuLqF2vMoRqiMkmvcqFjEpEgeu6Rx8tpZXKp77J8OUpMKy0m3jLYhbbw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+        <style>
+            body {
+                background: #000 !important;
+                color: #fff !important;
+            }
+            .ui.header, .ui.column {
+                color: #fff !important;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="ui middle aligned center aligned grid" style="height: 100vh;">
+            <div class="column">
+                <h3 class="ui header"><i class="ui green circle check icon"></i> No Connected Session</h3>
+                <p>Please create or connect to a session from the <strong>Instances</strong> tab.</p>
+            </div>
+        </div>
+    </body>
+</html>
