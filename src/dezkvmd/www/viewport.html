@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="dezKVM Management Interface">
+    <meta name="author" content="imuslab">
+    <meta name="dezkvm.csrf.token" content="{{.csrfToken}}">
+    <title>Streaming | DezKVM</title>
+    <script src="js/jquery-3.7.1.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/semantic.min.css" integrity="sha512-ySrYzxj+EI1e9xj/kRYqeDL5l1wW0IWY8pzHNTIZ+vc1D3Z14UDNPbwup4yOUmlRemYjgUXsUZ/xvCQU2ThEAw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/semantic.min.js" integrity="sha512-Y/wIVu+S+XJsDL7I+nL50kAVFLMqSdvuLqF2vMoRqiMkmvcqFjEpEgeu6Rx8tpZXKp77J8OUpMKy0m3jLYhbbw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <link rel="stylesheet" href="viewport.css">
+    <link rel="icon" type="image/png" href="/favicon.png">
+</head>
+<body>
+    <div id="streamWrapper">
+        <img id="remoteCapture" src="" oncontextmenu="return false;"></img>
+        <!-- <video id="remoteCapture" src="" oncontextmenu="return false;"></video> -->
+    </div>
+   <div id="menu">
+        <div id="advance-menu">
+            <button class="ui mini icon button" id="btnStorageKvm" onclick="switchMassStorageToKvm()" title="Switch Storage to KVM">
+                <i class="hdd icon"></i>
+            </button>
+            <button class="ui mini icon button" id="btnStorageRemote" onclick="switchMassStorageToRemote()" title="Switch Storage to Remote">
+                <i class="cloud upload icon"></i>
+            </button>
+            <select id="resolutionSelect" class="ui compact dropdown" onchange="changeResolution(this.value)">
+                <option value="">Loading resolutions...</option>
+            </select>
+            <select id="audioQualitySelect" class="ui compact dropdown" onchange="changeAudioQuality(this.value)">
+                <option value="disabled">Audio Off</option>
+                <option value="low">Low (16kHz)</option>
+                <option value="standard">Standard (24kHz)</option>
+                <option value="high">High (48kHz)</option>
+            </select>
+            <button class="ui mini icon button" id="btnResetHID" onclick="resetRemoteHID()" title="Reset Remote HID Device">
+                <i class="refresh icon"></i>
+            </button>
+            <button class="ui mini icon button" id="btnDisconnect" onclick="disconnect()" title="Disconnect">
+                <i class="sign out icon"></i>
+            </button>
+            
+        </div>
+        <div id="basic-menu">
+             <button class="ui mini basic icon button" id="btnFullScreen" onclick="toggleFullScreen()" title="Fullscreen">
+                <i style="font-weight: bolder;" class="expand icon"></i>
+            </button>
+            <button class="ui mini basic icon button" id="btnToggleAdvanceMenu" onclick="toggleAdvanceMenu()" title="Show/Hide Advanced Menu">
+                <i style="font-weight: bolder;" class="angle down icon"></i>
+            </button>
+        </div>
+        
+    </div>
+
+    <!-- Resolution Change Modal -->
+    <div id="resolutionChangeModal" class="ui small inverted modal">
+        <div class="content" style="text-align: center; padding: 2em;">
+            <div class="ui icon header" style="color: white;">
+                <i class="spinner loading icon"></i>
+                Changing Resolution
+            </div>
+            <p style="font-size: 1.1em; margin-top: 1em; color: white;">
+                Changing resolution of HDMI capture, please wait...
+            </p>
+            <button id="resumeSessionBtn" class="ui basic green button" style="display: none; margin-top: 2em; color: white;" onclick="resumeSession(event);">
+                <i class="green exchange icon"></i>
+                Resume Session
+            </button>
+        </div>
+    </div>
+
+    <script src="js/viewport.js"></script>
+    <script src="js/kvmevt.js"></script>
+</body>
+</html>
