@@ -1,8 +1,10 @@
-![usb-kvm](img/README/usb-kvm.jpg)
 
-# DezuKVM
 
-Budget IP-KVM designed for my SFF homelab / minilab setup.  I build this just because I don't really trust those off-the-shelf KVMs and Pi-KVM is a bit too expensive if I want to have one KVM device per computer in my homelab cluster. 
+![title image](img/title.png)
+
+# DezKVM
+
+Budget & platform independent IP-KVM solution built for systems running Linux. By using all USB protocol based hardware and involving the upstream v4l2 and alsa USB device drivers, DezKVM is able to run on most Linux embedded systems with no custom drivers required.
 
 > [!WARNING]
 > This project is in its very early stage and not production ready. Use with your own risk. 
@@ -10,35 +12,35 @@ Budget IP-KVM designed for my SFF homelab / minilab setup.  I build this just be
 
 ## Build
 
-### Dezukvmd (DezuKVM daemon)
+### Dezkvmd (DezKVM daemon)
 
-The Dezukvmd is a golang written piece of code that runs on a x86 or ARM computer with Debian based Linux installed. Require v4l2 and alsa with kernel 6.1 or above.  
+The Dezkvmd is a golang written piece of code that runs on a x86 or ARM computer with Debian based Linux installed. Require v4l2 and alsa with kernel 6.1 or above.  
 
 To build the Remdeskd, you will need go compiler. The go package manager will take care of the dependencies during your first build. 
 
 ```bash
-cd dezukvmd/
+cd dezkvmd/
 go mod tidy
 go build
 
-sudo ./dezukvmd
-# or use ./dezukvmd -h to show all start options
+sudo ./dezkvmd
+# or use ./dezkvmd -h to show all start options
 ```
 ### Setup Systemd Service
 
-Create a systemd service file at `/etc/systemd/system/dezukvmd.service`:
+Create a systemd service file at `/etc/systemd/system/dezkvmd.service`:
 
 ```ini
 [Unit]
-Description=DezuKVM IP-KVM Daemon
+Description=dezKVM IP-KVM Daemon
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/path/to/DezuKVM/src/dezukvmd
-ExecStart=/path/to/DezuKVM/src/dezukvmd/dezukvmd -mode=ipkvm
+WorkingDirectory=/path/to/DezKVM/src/dezkvmd
+ExecStart=/path/to/DezKVM/src/dezkvmd/dezkvmd -mode=ipkvm
 Restart=always
 RestartSec=5
 
@@ -46,27 +48,34 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-Replace `/path/to/DezuKVM` with the actual path to your DezuKVM installation directory.
+Replace `/path/to/dezKVM` with the actual path to your dezKVM installation directory.
 
 Then enable and start the service:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable dezukvmd
-sudo systemctl start dezukvmd
+sudo systemctl enable dezkvmd
+sudo systemctl start dezkvmd
 ```
 
 Check the service status:
 
 ```bash
-sudo systemctl status dezukvmd
+sudo systemctl status dezkvmd
 ```
 
 ### Hardware
+
+![usb-kvm](img/README/usb-kvm.jpg)
+
 See `hardware/pcbs/README.md`
 
 ### USB-KVM Firmware Flashing
 See `firmware/README.md`
+
+## Usage
+
+
 
 
 ### Video Capture Configs
@@ -88,19 +97,24 @@ By default, MS2109 HDMI capture card support the following resolutions. If you a
 1360 x 768 10fps = 10Mbps
 ```
 
+### USBKVM-App
+
+The USBKVM-App is a debug tool for the USB-KVM section of the DezKVM build that also serve as a USB-KVM viewer. It is used for checking if the USB-KVM subsystem works before integrating into a larger IP-KVM system. See `tools/usbkvm-app/` for more information.
+
 ## License
-DezuKVM
+
+DezKVM
 Copyright (C) 2025 Toby Chui
 
-DezuKVM is free software; You can redistribute it and/or modify it under the terms of:
+DezKVM is free software; You can redistribute it and/or modify it under the terms of:
   - the GNU Affero General Public License version 3 as published by the Free Software Foundation.
 You don't have to do anything special to accept the license and you don’t have to notify anyone which that you have made that decision.
 
-DezuKVM is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+DezKVM is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
 without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 See your chosen license for more details.
 
-You should have received a copy of both licenses along with DezuKVM.
+You should have received a copy of both licenses along with DezKVM.
 If not, see <http://www.gnu.org/licenses/>.
 
 **Note: There will be no support if you are using 3rd party parts or systems. If you are creating a new issue, make sure you are using the official implementation here with the recommended hardware and software setups**
