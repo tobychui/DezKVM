@@ -64,6 +64,22 @@ Check the service status:
 sudo systemctl status dezkvmd
 ```
 
+#### Install Dependencies
+
+Some packages are required to run DezKVM (Require Linux kernel 6.1 or above, Debian based distro recommended). If your `go build` command above failed due to missing v4l2 types or user space properties, you can install the dependencies by running the following command. 
+
+```
+sudo apt install build-essential libv4l-dev v4l-utils 
+```
+
+If your system fail to capture audio output from remote device, or show invalid audio device properties, install the missing alsa utilities with the following command. 
+
+```
+sudo apt install alsa-utils
+```
+
+(Or you can just run both before go build, I mean why not? )
+
 ### Hardware
 
 ![usb-kvm](img/README/usb-kvm.jpg)
