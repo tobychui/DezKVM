@@ -1,13 +1,75 @@
 
 
-![title image](img/title.png)
+![title](img/README/title.png)
 
-# DezKVM
+# DezKVM — The DIY Multi-Port IP-KVM
 
-Budget & platform independent IP-KVM solution built for systems running Linux. By using all USB protocol based hardware and involving the upstream v4l2 and alsa USB device drivers, DezKVM is able to run on most Linux embedded systems with no custom drivers required.
+DezKVM is an open-source, ultra-low-cost multi-port IP-KVM designed to run on standard Linux systems.
+
+Instead of using HDMI to CSI adapter or proprietary capture hardware, DezKVM uses fully USB-based components supported by upstream Linux drivers (V4L2 and ALSA). This means the system runs on common embedded platforms such as SBCs and mini PCs without requiring any kernel patches or vendor drivers.
+
+The goal of DezKVM is simple:
+
+**Make scalable IP-KVM infrastructure affordable, hackable, and easy to build using commodity hardware.**
+
+
 
 > [!WARNING]
 > This project is in its very early stage and not production ready. Use with your own risk. 
+
+
+
+If you are looking for a KVM over USB or USB-KVM device, visit [DezKVM Go](https://github.com/tobychui/DezKVM-Go) Project.
+
+## Why DezKVM Exists
+
+Modern infrastructure still depends heavily on physical console access.
+
+When systems fail, networks misconfigure, or operating systems refuse to boot, remote access methods such as SSH, RDP, or web dashboards stop working. At that point, only a physical keyboard, monitor, and mouse can recover the machine.
+
+Commercial IP-KVM solutions solve this problem — but they are often:
+
+- Expensive
+- Proprietary
+- Difficult to scale
+- Locked to vendor ecosystems
+- Overkill for homelabs and small deployments
+
+Existing DIY solutions significantly reduce cost, but many still rely on custom kernels, FPGA designs, or tightly coupled hardware platforms. 
+
+**DezKVM takes a different approach.** 
+
+Instead of reinventing drivers or hardware stacks, DezKVM builds entirely on top of standard USB devices already supported by Linux:
+
+- USB Video - handled by upstream **V4L2**
+- USB Audio - handled by **ALSA**
+- USB HID - physical, off-the-shelf **UART to HID ASIC**
+- USB ATX - communicate to host software using **USB CDC**
+- All connected using a standard USB 2.0 hub
+
+Because of this design philosophy:
+
+✅ No custom kernel patches / proprietary drivers
+✅ Works on most Linux SBCs and mini PCs (as host)
+✅ High compatibility on different (remote) computers
+✅ Easy multi-port scaling
+✅ Long-term maintainability 
+
+## Comparison
+
+| Feature                     | DezKVM                 | PiKVM                           | JetKVM          | GiNet KVM       |
+| --------------------------- | ---------------------- | ------------------------------- | --------------- | --------------- |
+| Open Source                 | ✅ Fully                | ✅ Mostly                        | ⚠️ Partial       | ❌ No            |
+| DIY Friendly                | ✅ Yes                  | ✅ Mostly (v1 & v2)              | ❌ No            | ❌ No            |
+| Multi-Port Support          | ✅ Scale using USB hubs | ⚠️ Expensive KVM Switch required | ❌ Single Target | ❌ Single Target |
+| Multi-View Support          | ✅ Yes                  | ⚠️ Require switching             | ❌ No            | ❌ No            |
+| Hardware Lock-in            | ❌ None                 | ⚠️ Raspberry Pi                  | ✅ Vendor HW     | ✅ Vendor HW     |
+| Uses Standard Linux Drivers | ✅ Yes                  | ⚠️ Partial                       | ❌ Custom Stack  | ❌ Proprietary   |
+| Custom Kernel Required      | ❌ No                   | ⚠️ Sometimes                     | ✅ Yes           | ✅ Yes           |
+| Cost per Remote             | ⭐ Very Low             | Medium                          | High            | High            |
+| Offline Operation           | ✅ Yes                  | ✅ Yes                           | ✅ Yes           | ✅ Yes           |
+| Hackable / Extendable       | ✅ High                 | Medium                          | Low             | Very Low        |
+
 
 
 ## Build
@@ -82,11 +144,11 @@ sudo apt install alsa-utils
 
 ### Hardware
 
-![usb-kvm](img/README/usb-kvm.jpg)
+#### Build your own hardware
 
-See `hardware/pcbs/README.md`
+See `hardware/README.md`
 
-### USB-KVM Firmware Flashing
+#### Onboard ATX Controller Firmware Flashing
 See `firmware/README.md`
 
 ## Usage
