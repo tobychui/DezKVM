@@ -7,6 +7,8 @@
 */
 const enableKvmEventDebugPrintout = false; //Set to true to enable debug printout
 const cursorCaptureElementId = "remoteCapture";
+const streamingContainerId = "remoteCapture";
+
 let hidsocket;
 let hidWebSocketReady = false;
 let protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -44,6 +46,15 @@ function setStreamingSource(deviceUUID) {
     videoElement.src = videoStreamURL;
 }
 
+/* Get current streaming resolution, return [width, height] */
+function getCurrentStreamingResolution(){
+    const img = document.getElementById(streamingContainerId);
+    const width = img.naturalWidth || parseInt(parts[0]);
+    const height = img.naturalHeight || parseInt(parts[1]);
+    return [width, height];
+}
+
+
 /* Mouse events */
 function handleMouseMove(event) {
     const hidCommand = {
@@ -52,17 +63,36 @@ function handleMouseMove(event) {
         mouse_y: event.clientY,
     };
 
-    const rect = event.target.getBoundingClientRect();
-    const relativeX = event.clientX - rect.left;
-    const relativeY = event.clientY - rect.top;
-    
-    if (relativeX < 0 || relativeY < 0 || relativeX > rect.width || relativeY > rect.height) {
-        mouseIsOutside = true;
-        return; // Mouse is outside the client rect
+    let rect = event.target.getBoundingClientRect();
+    let offsetX = 0;
+    let offsetY = 0;
+    if (isScaleToFit){
+        //Calculate relative coordinates in scale to fit mode
+        let boundingEdge = getScaleToFitBoundEdge();
+        let streamingResolution = getCurrentStreamingResolution();
+        if (boundingEdge === 'width'){
+            //Width is already 100%, calculate the actual height
+            let scaleRatio = rect.width / streamingResolution[0];
+            let adjustedRectHeight = streamingResolution[1] * scaleRatio;
+            let verticalOffset = (rect.height - adjustedRectHeight) / 2;
+            console.log(`Adjusted height: ${adjustedRectHeight}, vertical offset: ${verticalOffset} ${scaleRatio}`);
+            offsetY -= verticalOffset;
+            rect.height = adjustedRectHeight;
+        }else{
+            //Height is already 100%, calculate the actual width
+            let scaleRatio = rect.height / streamingResolution[1];
+            let adjustedRectWidth = streamingResolution[0] * scaleRatio;
+            let horizontalOffset = (rect.width - adjustedRectWidth) / 2;
+            offsetX -= horizontalOffset;
+            rect.width = adjustedRectWidth;
+        }
     }
-    mouseIsOutside = false;
-    const percentageX = (relativeX / rect.width) * 4096;
-    const percentageY = (relativeY / rect.height) * 4096;
+
+    let relativeX = event.clientX - rect.left;
+    let relativeY = event.clientY - rect.top;
+    
+    const percentageX = Math.max(0, Math.min(4095, ((relativeX + offsetX) / rect.width) * 4096));
+    const percentageY = Math.max(0, Math.min(4095, ((relativeY + offsetY) / rect.height) * 4096));
 
     hidCommand.mouse_x = Math.round(percentageX);
     hidCommand.mouse_y = Math.round(percentageY);
@@ -240,6 +270,51 @@ function handleKeyUp(event) {
 }
 
 /* Start and Stop HID events */
+function attachHidEventListeners() {
+    const remoteCaptureEle = document.getElementById(cursorCaptureElementId);
+    if (!remoteCaptureEle) {
+        console.error('Remote capture element not found');
+        return;
+    }
+
+    // Attach keyboard event listeners to document (so they work globally)
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
+
+    // Attach mouse event listeners to capture element
+    remoteCaptureEle.addEventListener('click', function(event){
+        event.preventDefault();
+        //console.log('Capture element clicked, focusing for keyboard input.');
+        remoteCaptureEle.focus();
+    });
+    remoteCaptureEle.addEventListener('mousemove', handleMouseMove);
+    remoteCaptureEle.addEventListener('mousedown', handleMousePress);
+    remoteCaptureEle.addEventListener('mouseup', handleMouseRelease);
+    remoteCaptureEle.addEventListener('wheel', handleMouseScroll);
+    
+    console.log('HID event listeners attached');
+}
+
+function detachHidEventListeners() {
+    const remoteCaptureEle = document.getElementById(cursorCaptureElementId);
+    if (!remoteCaptureEle) {
+        console.error('Remote capture element not found');
+        return;
+    }
+
+    // Remove keyboard event listeners from document
+    document.removeEventListener('keydown', handleKeyDown);
+    document.removeEventListener('keyup', handleKeyUp);
+
+    // Remove mouse event listeners from capture element
+    remoteCaptureEle.removeEventListener('mousemove', handleMouseMove);
+    remoteCaptureEle.removeEventListener('mousedown', handleMousePress);
+    remoteCaptureEle.removeEventListener('mouseup', handleMouseRelease);
+    remoteCaptureEle.removeEventListener('wheel', handleMouseScroll);
+    
+    console.log('HID event listeners detached');
+}
+
 function startHidWebSocket(){
     if (hidsocket){
         //Already started
@@ -268,21 +343,8 @@ function startHidWebSocket(){
   
 }
 
-// Attach keyboard event listeners
-const remoteCaptureEle = document.getElementById(cursorCaptureElementId);
-document.addEventListener('keydown', handleKeyDown);
-document.addEventListener('keyup', handleKeyUp);
-
-// Attach mouse event listeners
-remoteCaptureEle.addEventListener('click', function(event){
-    console.log('Capture element clicked, focusing for keyboard input.');
-    remoteCaptureEle.focus();
-    event.preventDefault();
-});
-remoteCaptureEle.addEventListener('mousemove', handleMouseMove);
-remoteCaptureEle.addEventListener('mousedown', handleMousePress);
-remoteCaptureEle.addEventListener('mouseup', handleMouseRelease);
-remoteCaptureEle.addEventListener('wheel', handleMouseScroll);
+// Attach event listeners on page load
+attachHidEventListeners();
 
 function stopHidWebSocket(){
     if (!hidsocket){
@@ -293,8 +355,6 @@ function stopHidWebSocket(){
     hidsocket.close();
     hidsocket = null;
     console.log('HID Transport WebSocket disconnected.');
-    document.removeEventListener('keydown', handleKeyDown);
-    document.removeEventListener('keyup', handleKeyUp);
 }
 
 /* Reset remote HID state */
@@ -305,6 +365,10 @@ function resetRemoteHID() {
         };
         hidsocket.send(JSON.stringify(hidResetCommand));
         console.log('HID reset command sent');
+
+        $.toast({
+            message: '<i class="ui green circle check icon"></i> Remote HID state reset completed',
+        });
     } else {
         alert('HID WebSocket is not connected');
     }
@@ -313,8 +377,8 @@ function resetRemoteHID() {
 
 
 /* Audio Streaming Frontend */
-let audioSocket;
-let audioContext;
+let audioSocket = null;
+let audioContext = null;
 let audioQueue = [];
 let audioPlaying = false;
 

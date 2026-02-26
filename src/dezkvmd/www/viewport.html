@@ -10,6 +10,7 @@
     <script src="js/jquery-3.7.1.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/semantic.min.css" integrity="sha512-ySrYzxj+EI1e9xj/kRYqeDL5l1wW0IWY8pzHNTIZ+vc1D3Z14UDNPbwup4yOUmlRemYjgUXsUZ/xvCQU2ThEAw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/semantic.min.js" integrity="sha512-Y/wIVu+S+XJsDL7I+nL50kAVFLMqSdvuLqF2vMoRqiMkmvcqFjEpEgeu6Rx8tpZXKp77J8OUpMKy0m3jLYhbbw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
     <link rel="stylesheet" href="viewport.css">
     <link rel="icon" type="image/png" href="/favicon.png">
 </head>
@@ -37,6 +38,18 @@
             </select>
             <button class="ui mini icon button" id="btnResetHID" onclick="resetRemoteHID()" title="Reset Remote HID Device">
                 <i class="refresh icon"></i>
+            </button>
+             <button class="ui mini icon button" id="showPasteBox" onclick="showScreenshotSelector()" title="Copy with OCR">
+                <i class="copy icon"></i>
+            </button>
+            <button class="ui mini icon button" id="showPasteBox" onclick="showPasteBox()" title="Show Paste Box">
+                <i class="paste icon"></i>
+            </button>
+            <button class="ui mini icon button" id="btnOnscreenKeyboard" onclick="toggleOnscreenKeyboard()" title="Toggle On-Screen Keyboard">
+                <i class="keyboard icon"></i>
+            </button>
+            <button class="ui mini icon button" id="btnScaleToFit" onclick="toggleScaleToFit()" title="Toggle Scale to Fit">
+                <i class="expand icon"></i>
             </button>
             <button class="ui mini icon button" id="btnDisconnect" onclick="disconnect()" title="Disconnect">
                 <i class="sign out icon"></i>
@@ -71,7 +84,24 @@
         </div>
     </div>
 
+    <!-- Paste Box Modal -->
+    <div id="pasteBox" class="paste-box-container" style="display: none;"></div>
+
+    <!-- Onscreen Keyboard -->
+    <div id="onscreenKeyboard" class="onscreen-keyboard" style="display: none;"></div>
+   
+
     <script src="js/viewport.js"></script>
     <script src="js/kvmevt.js"></script>
+    <script src="js/ocr-copy.js"></script>
+    <script>
+        $("#onscreenKeyboard").load("components/on-screen-keyboard.html", function() {
+            console.log("On-Screen Keyboard component loaded.");
+        });
+
+        $("#pasteBox").load("components/paste-box.html", function() {
+            console.log("Paste Box component loaded.");
+        });
+    </script>
 </body>
 </html>

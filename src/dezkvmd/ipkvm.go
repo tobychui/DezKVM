@@ -11,8 +11,10 @@ import (
 
 	"github.com/gorilla/csrf"
 	"imuslab.com/dezkvm/dezkvmd/mod/auth"
+	"imuslab.com/dezkvm/dezkvmd/mod/db"
 	"imuslab.com/dezkvm/dezkvmd/mod/dezkvm"
 	"imuslab.com/dezkvm/dezkvmd/mod/logger"
+	"imuslab.com/dezkvm/dezkvmd/mod/sshprox"
 )
 
 var (
@@ -20,17 +22,29 @@ var (
 	listeningServerMux *http.ServeMux
 	authManager        *auth.AuthManager
 	systemLogger       *logger.Logger
+	systemDB           *db.DB
+	sshproxManager     *sshprox.Manager
 )
+
+func init_system_db() error {
+	// Initialize the system database
+	var err error
+	systemDB, err = db.NewDB(DB_FILE_PATH)
+	if err != nil {
+		return err
+	}
+	return nil
+}
 
 func init_auth_manager() error {
 	// Initialize logger
 	systemLogger = logger.NewLogger(logger.WithLogLevel(logger.InfoLevel))
 
-	// Initialize AuthManager with logger and DB path
+	// Initialize AuthManager with logger and shared DB instance
 	var err error
 	authManager, err = auth.NewAuthManager(auth.Options{
-		DBPath: DB_FILE_PATH,
-		Log:    systemLogger.Info,
+		DB:  systemDB,
+		Log: systemLogger.Info,
 	})
 	if err != nil {
 		return err
@@ -41,12 +55,22 @@ func init_auth_manager() error {
 func init_ipkvm_mode() error {
 	listeningServerMux = http.NewServeMux()
 
+	// Initialize the system database
+	err := init_system_db()
+	if err != nil {
+		log.Fatal("Failed to initialize system database:", err)
+		return err
+	}
+
 	// Initialize the Auth Manager
-	err := init_auth_manager()
+	err = init_auth_manager()
 	if err != nil {
 		log.Fatal("Failed to initialize Auth Manager:", err)
 		return err
 	}
+
+	// Initialize SSH Proxy Manager
+	sshproxManager = sshprox.NewSSHProxyManager()
 
 	//Create a new DezkVM manager
 	dezkvmManager = dezkvm.NewKvmHostInstance(&dezkvm.RuntimeOptions{
@@ -88,6 +112,9 @@ func init_ipkvm_mode() error {
 		if authManager != nil {
 			authManager.Close()
 		}
+		if systemDB != nil {
+			systemDB.Close()
+		}
 		log.Println("Shutdown complete.")
 		os.Exit(0)
 	}()
@@ -97,6 +124,9 @@ func init_ipkvm_mode() error {
 
 	// Register DezkVM related APIs
 	register_ipkvm_apis(listeningServerMux)
+
+	// Register Terminal related APIs
+	register_terminal_apis(listeningServerMux)
 
 	err = http.ListenAndServe(":9000", listeningServerMux)
 	return err

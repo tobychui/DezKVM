@@ -57,7 +57,6 @@ func main() {
 	flag.Parse()
 
 	//Generate the node uuid if not set
-
 	if _, err := os.Stat(UUID_FILE); os.IsNotExist(err) {
 		newUUID := uuid.NewString()
 		err = os.WriteFile(UUID_FILE, []byte(newUUID), 0644)
@@ -84,11 +83,6 @@ func main() {
 		kvmCfg.USBKVMBaudrate = 9600
 
 		err = SetupHIDCommunication(kvmCfg)
-		if err != nil {
-			log.Fatal(err)
-		}
-	case "debug":
-		err := handle_debug_tool()
 		if err != nil {
 			log.Fatal(err)
 		}

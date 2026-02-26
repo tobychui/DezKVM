@@ -1,158 +1,90 @@
 package main
 
 import (
-	"log"
+	"bufio"
+	"encoding/json"
 	"net/http"
-
-	"imuslab.com/dezkvm/dezkvmd/mod/usbcapture"
-	"imuslab.com/dezkvm/dezkvmd/mod/utils"
+	"os"
+	os_user "os/user"
+	"strings"
 )
 
+// register_auth_apis registers authentication-related API endpoints
 func register_auth_apis(mux *http.ServeMux) {
-	// Check API for session validation
-	mux.HandleFunc("/api/v1/check", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		ok := authManager.UserIsLoggedIn(r)
-		if !ok {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("{\"status\":\"ok\"}"))
-	})
-	// Login API
-	mux.HandleFunc("/api/v1/login", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		err := authManager.LoginUser(w, r)
-		if err != nil {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("{\"status\":\"success\"}"))
-	})
-
-	// Logout API
-	mux.HandleFunc("/api/v1/logout", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		err := authManager.LogoutUser(w, r)
-		if err != nil {
-			http.Error(w, "Logout failed", http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("{\"status\":\"logged out\"}"))
-	})
+	mux.HandleFunc("/api/v1/check", handleCheck)
+	mux.HandleFunc("/api/v1/login", handleLogin)
+	mux.HandleFunc("/api/v1/logout", handleLogout)
 }
 
+// register_ipkvm_apis registers IP-KVM-related API endpoints
 func register_ipkvm_apis(mux *http.ServeMux) {
-	authManager.HandleFunc("/api/v1/stream/{uuid}/video", func(w http.ResponseWriter, r *http.Request) {
-		instanceUUID := r.PathValue("uuid")
-		log.Println("Requested video stream for instance UUID:", instanceUUID)
-		dezkvmManager.HandleVideoStreams(w, r, instanceUUID)
-	}, mux)
+	authManager.HandleFunc("/api/v1/stream/{uuid}/video", handleVideoStream, mux)
+	authManager.HandleFunc("/api/v1/stream/{uuid}/audio", handleAudioStream, mux)
+	authManager.HandleFunc("/api/v1/hid/{uuid}/events", handleHIDEvents, mux)
+	authManager.HandleFunc("/api/v1/mass_storage/switch", handleMassStorageSwitch, mux)
+	authManager.HandleFunc("/api/v1/instances", handleListInstances, mux)
+	authManager.HandleFunc("/api/v1/resolutions/{uuid}", handleGetSupportedResolutions, mux)
+	authManager.HandleFunc("/api/v1/resolution/{uuid}", handleGetCurrentResolution, mux)
+	authManager.HandleFunc("/api/v1/resolution/change", handleChangeResolution, mux)
+	authManager.HandleFunc("/api/v1/screenshot/{uuid}", handleScreenshot, mux)
+}
 
-	authManager.HandleFunc("/api/v1/stream/{uuid}/audio", func(w http.ResponseWriter, r *http.Request) {
-		instanceUUID := r.PathValue("uuid")
-		dezkvmManager.HandleAudioStreams(w, r, instanceUUID)
-	}, mux)
+// register_terminal_apis registers terminal-related API endpoints
+func register_terminal_apis(mux *http.ServeMux) {
+	authManager.HandleFunc("/api/tools/webssh", handleCreateSSHSession, mux)
+	authManager.HandleFunc("/web.ssh/", handleSSHWebInterface, mux)
+	authManager.HandleFunc("/api/tools/whoami", handleWhoAmI, mux)
+}
 
-	authManager.HandleFunc("/api/v1/hid/{uuid}/events", func(w http.ResponseWriter, r *http.Request) {
-		instanceUUID := r.PathValue("uuid")
-		dezkvmManager.HandleHIDEvents(w, r, instanceUUID)
-	}, mux)
+// handleWhoAmI returns the current Unix user and a list of all login-capable users on the system
+func handleWhoAmI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
 
-	authManager.HandleFunc("/api/v1/mass_storage/switch", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		instanceUUID, err := utils.PostPara(r, "uuid")
-		if err != nil {
-			http.Error(w, "Missing or invalid uuid parameter", http.StatusBadRequest)
-			return
-		}
-		side, err := utils.PostPara(r, "side")
-		if err != nil {
-			http.Error(w, "Missing or invalid side parameter", http.StatusBadRequest)
-			return
-		}
-		switch side {
-		case "kvm":
-			dezkvmManager.HandleMassStorageSideSwitch(w, r, instanceUUID, true)
-		case "remote":
-			dezkvmManager.HandleMassStorageSideSwitch(w, r, instanceUUID, false)
-		default:
-			http.Error(w, "Invalid side parameter", http.StatusBadRequest)
-		}
-	}, mux)
+	// Get current user
+	currentUser, err := os_user.Current()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error": "Unable to fetch current user"}`))
+		return
+	}
 
-	authManager.HandleFunc("/api/v1/instances", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			dezkvmManager.HandleListInstances(w, r)
-		} else {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	// Parse /etc/passwd to collect users with a valid login shell
+	users := []string{}
+	f, err := os.Open("/etc/passwd")
+	if err == nil {
+		defer f.Close()
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.HasPrefix(line, "#") || line == "" {
+				continue
+			}
+			fields := strings.Split(line, ":")
+			if len(fields) < 7 {
+				continue
+			}
+			shell := fields[6]
+			// Include only users with a real login shell
+			if shell == "/bin/false" || shell == "/usr/sbin/nologin" || shell == "/sbin/nologin" || shell == "" {
+				continue
+			}
+			users = append(users, fields[0])
 		}
-	}, mux)
+	}
 
-	authManager.HandleFunc("/api/v1/resolutions/{uuid}", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		instanceUUID := r.PathValue("uuid")
-		dezkvmManager.HandleGetSupportedResolutions(w, r, instanceUUID)
-	}, mux)
+	type whoamiResponse struct {
+		Current string   `json:"current"`
+		Users   []string `json:"users"`
+	}
 
-	authManager.HandleFunc("/api/v1/resolution/{uuid}", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		instanceUUID := r.PathValue("uuid")
-		dezkvmManager.HandleGetCurrentResolution(w, r, instanceUUID)
-	}, mux)
+	resp := whoamiResponse{
+		Current: currentUser.Username,
+		Users:   users,
+	}
 
-	authManager.HandleFunc("/api/v1/resolution/change", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		instanceUUID, err := utils.PostPara(r, "uuid")
-		if err != nil {
-			http.Error(w, "Missing or invalid uuid parameter", http.StatusBadRequest)
-			return
-		}
-		width, err := utils.PostInt(r, "width")
-		if err != nil {
-			http.Error(w, "Missing or invalid width parameter", http.StatusBadRequest)
-			return
-		}
-		height, err := utils.PostInt(r, "height")
-		if err != nil {
-			http.Error(w, "Missing or invalid height parameter", http.StatusBadRequest)
-			return
-		}
-		fps, err := utils.PostInt(r, "fps")
-		if err != nil {
-			http.Error(w, "Missing or invalid fps parameter", http.StatusBadRequest)
-			return
-		}
-
-		newResolution := &usbcapture.CaptureResolution{
-			Width:  width,
-			Height: height,
-			FPS:    fps,
-		}
-		dezkvmManager.HandleChangeResolution(w, r, instanceUUID, newResolution)
-	}, mux)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }

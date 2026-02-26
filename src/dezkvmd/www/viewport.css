@@ -79,6 +79,16 @@
     margin: auto;
     object-fit: contain;
     cursor: url('img/cursor_overlay.png') 0 0, pointer;
+    user-select: none;
+}
+
+/* Scale to Fit mode - scales image to fill viewport while maintaining aspect ratio */
+#remoteCapture.scale-to-fit {
+    width: 100vw;
+    height: 100vh;
+    max-width: 100vw;
+    max-height: 100vh;
+    object-fit: contain;
 }
 
 
@@ -87,4 +97,449 @@
     bottom: 2em;
     right: 2em;
     z-index: 1000;
+}
+
+/* Paste Box Styles */
+.paste-box-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 2000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.paste-box-content {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.paste-box-header {
+    padding: 1em 1.5em;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.paste-box-header h3 {
+    margin: 0;
+    font-size: 1.2em;
+    color: #333;
+}
+
+.paste-box-body {
+    padding: 1.5em;
+    flex: 1;
+    overflow: auto;
+}
+
+#pasteTextarea {
+    width: 100%;
+    min-height: 200px;
+    padding: 0.8em;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    resize: vertical;
+    outline: none;
+}
+
+#pasteTextarea:focus {
+    border-color: #2185d0;
+    box-shadow: 0 0 0 2px rgba(33, 133, 208, 0.2);
+}
+
+.paste-char-counter {
+    margin-top: 0.5em;
+    text-align: right;
+    font-size: 0.9em;
+}
+
+.paste-char-counter span {
+    color: #767676;
+    font-family: monospace;
+}
+
+.paste-box-footer {
+    padding: 1em 1.5em;
+    border-top: 1px solid #e0e0e0;
+    display: flex;
+    gap: 0.5em;
+    justify-content: flex-end;
+}
+
+/* Onscreen Keyboard Styles - Light Theme (Default) */
+.onscreen-keyboard {
+    position: fixed;
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    z-index: 1500;
+    user-select: none;
+    /*transition: all 0.3s ease;    */
+    border: 1px solid #ddd;
+}
+
+.onscreen-keyboard.dragging {
+    cursor: move;
+    opacity: 0.9;
+}
+
+.onscreen-keyboard.fullwidth {
+    width: 100% !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    border-radius: 0;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}
+
+.keyboard-drag-bar {
+    background: #f5f5f5;
+    padding: 0.5em 1em;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    cursor: move;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.keyboard-title {
+    color: #333;
+    font-weight: bold;
+    font-size: 0.9em;
+}
+
+.keyboard-controls {
+    display: flex;
+    gap: 0.3em;
+}
+
+.keyboard-controls button {
+    margin: 0 !important;
+    background: #e0e0e0 !important;
+    color: #333 !important;
+}
+
+.keyboard-controls button:hover {
+    background: #d0d0d0 !important;
+}
+
+.keyboard-body {
+    padding: 1em;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+}
+
+.keyboard-row {
+    display: flex;
+    gap: 0.3em;
+    justify-content: center;
+}
+
+.key {
+    background: linear-gradient(to bottom, #ffffff, #f5f5f5);
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    color: #333;
+    padding: 0.6em 0.4em;
+    min-width: 2.5em;
+    height: 2.5em;
+    font-size: 0.85em;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.1s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    position: relative;
+    line-height: 1.2;
+}
+
+.key:hover {
+    background: linear-gradient(to bottom, #f8f8f8, #e8e8e8);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+}
+
+.key:active,
+.key.active {
+    background: linear-gradient(to bottom, #e0e0e0, #d0d0d0);
+    transform: translateY(1px);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.key.held {
+    background: linear-gradient(to bottom, #e74c3c, #c0392b);
+    border-color: #a93226;
+    color: #fff;
+    box-shadow: 0 0 8px rgba(231, 76, 60, 0.6);
+}
+
+/* Dark Theme for Keyboard */
+body.dark-theme .onscreen-keyboard {
+    background: #2c3e50;
+    border-color: #1a252f;
+}
+
+body.dark-theme .keyboard-drag-bar {
+    background: #34495e;
+    border-bottom-color: #1a252f;
+}
+
+body.dark-theme .keyboard-title {
+    color: #ecf0f1;
+}
+
+body.dark-theme .keyboard-controls button {
+    background: rgba(255, 255, 255, 0.1) !important;
+    color: #ecf0f1 !important;
+}
+
+body.dark-theme .keyboard-controls button:hover {
+    background: rgba(255, 255, 255, 0.2) !important;
+}
+
+body.dark-theme .key {
+    background: linear-gradient(to bottom, #4a5f7f, #3a4f6f);
+    border-color: #2c3e50;
+    color: #ecf0f1;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+body.dark-theme .key:hover {
+    background: linear-gradient(to bottom, #5a6f8f, #4a5f7f);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
+}
+
+body.dark-theme .key:active,
+body.dark-theme .key.active {
+    background: linear-gradient(to bottom, #2a3f5f, #1a2f4f);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Keyboard Layout Sections */
+.keyboard-row-function {
+    margin-bottom: 0.8em;
+    padding-bottom: 0.8em;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    justify-content: start;
+}
+
+body.dark-theme .keyboard-row-function {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.keyboard-main-area {
+    display: flex;
+    gap: 1em;
+}
+
+.keyboard-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+}
+
+.keyboard-section-main {
+    flex: 0 0 auto;
+}
+
+.keyboard-section-nav {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 1.5em;
+    padding-top: 0.4em;
+}
+
+.keyboard-section-numpad {
+    flex: 0 0 auto;
+}
+
+.keyboard-numpad-main {
+    display: flex;
+    gap: 0.3em;
+}
+
+.keyboard-numpad-digits {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+}
+
+.keyboard-numpad-operators {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+}
+
+.keyboard-nav-cluster {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+}
+
+.keyboard-arrow-cluster {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+}
+
+.keyboard-row-arrow-top {
+    justify-content: center;
+}
+
+.keyboard-row-arrow-bottom {
+    justify-content: center;
+}
+
+.key-gap {
+    width: 0.8em;
+}
+
+.key-section-spacer {
+    width: 2em;
+}
+
+.key-placeholder {
+    width: 2.5em;
+}
+
+/* Key Size Classes */
+.key-backspace {
+    min-width: 6em;
+}
+
+.key-tab {
+    min-width: 4em;
+}
+
+.key-backslash {
+    min-width: 4.5em;
+}
+
+.key-caps {
+    min-width: 5em;
+}
+
+.key-enter {
+    min-width: 6.5em;
+}
+
+.key-shift-left {
+    min-width: 6.5em;
+}
+
+.key-shift-right {
+    min-width: 8em;
+}
+
+.key-ctrl {
+    min-width: 3.5em;
+}
+
+.key-win {
+    min-width: 3.5em;
+}
+
+.key-alt {
+    min-width: 3.5em;
+}
+
+.key-fn-key {
+    min-width: 3.5em;
+}
+
+.key-space {
+    min-width: 18em;
+    flex: 1;
+}
+
+.key-esc {
+    min-width: 3.5em;
+}
+
+.key-fn {
+    min-width: 2.8em;
+    font-size: 0.75em;
+}
+
+.key-nav {
+    min-width: 3em;
+    font-size: 0.75em;
+}
+
+.key-arrow {
+    min-width: 2.8em;
+}
+
+.key-numpad {
+    min-width: 3em;
+    height: 2.5em;
+}
+
+.key-numpad-zero {
+    min-width: 6.3em;
+}
+
+.key-numpad-plus {
+    height: 5.4em;
+}
+
+.key-numpad-enter {
+    height: 5.4em;
+}
+
+.modifier-key {
+    font-weight: 600;
+}
+
+#btnToggleHoldMode.lock {
+    background-color: #e74c3c !important;
+    color: #fff !important;
+    box-shadow: 0 0 8px rgba(231, 76, 60, 0.6);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .onscreen-keyboard {
+        width: 100% !important;
+        left: 0 !important;
+        bottom: 0 !important;
+        border-radius: 0;
+        border-top-left-radius: 8px;
+        border-top-right-radius: 8px;
+    }
+    
+    .keyboard-drag-bar {
+        cursor: default;
+    }
+    
+    .key {
+        min-width: 2em;
+        height: 2.2em;
+        font-size: 0.75em;
+        padding: 0.4em 0.2em;
+    }
+    
+    .key-space {
+        min-width: 10em;
+    }
 }

@@ -1,0 +1,34 @@
+<div class="paste-box-content">
+    <div class="paste-box-header">
+        <h3>Paste Text to Remote Computer</h3>
+        <button class="ui mini icon button" onclick="closePasteBox()" title="Close">
+            <i class="close icon"></i>
+        </button>
+    </div>
+    <div class="paste-box-body">
+        <textarea id="pasteTextarea" placeholder="Paste or type text here. Only alphanumeric characters (a-z, A-Z, 0-9) and basic symbols will be sent." maxlength="1000" oninput="updatePasteBoxCharCounter()"></textarea>
+        <div class="paste-char-counter">
+            <span id="pasteCharCounter">0 / 1000</span>
+        </div>
+        <div class="ui small black progress paste-char-progress" id="pasteProgressBar" style="display: none; margin-top: 0.6em;">
+            <div class="bar">
+                <div class="progress"></div>
+            </div>
+        </div>
+    </div>
+    <div class="paste-box-footer">
+        <button class="ui basic button" id="btnSendPaste" onclick="sendPasteText()">
+            <i class="blue keyboard icon"></i>
+            Send to Remote
+        </button>
+        <button class="ui basic button" id="btnClearPaste" onclick="clearPasteBox()">
+            <i class="eraser icon"></i>
+            Clear
+        </button>
+        <button class="ui red basic button" id="btnCancelPaste" onclick="cancelPasteText()" style="display: none;">
+            <i class="times icon"></i>
+            Cancel
+        </button>
+    </div>
+</div>
+<script src="js/paste-box.js"></script>

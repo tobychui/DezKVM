@@ -62,7 +62,7 @@ func (c *Controller) HIDWebSocketHandler(w http.ResponseWriter, r *http.Request)
 			prettyBytes += fmt.Sprintf("0x%02X ", b)
 		}
 		if err := conn.WriteMessage(websocket.TextMessage, []byte(prettyBytes)); err != nil {
-			if err != nil && strings.Contains(err.Error(), "broken pipe") {
+			if strings.Contains(err.Error(), "broken pipe") {
 				log.Println("WebSocket connection closed (broken pipe), cleaning up")
 				break
 			}

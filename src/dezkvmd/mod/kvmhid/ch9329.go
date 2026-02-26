@@ -73,12 +73,12 @@ func (c *Controller) WriteChipProperties() ([]byte, error) {
 		0x57, 0xAB, 0x00, 0x0B,
 		0x0B, // Length of the payload
 		0x01, // Set product string
-		0x09, // Length of the USB product string
-		'R', 'e', 'm', 'd', 'e', 's', 'K', 'V', 'M',
+		0x06, // Length of the USB product string
+		'D', 'e', 'z', 'K', 'V', 'M',
 		0x00, // Checksum placeholder
 	}
 
-	productString[16] = calcChecksum(productString[:16])
+	productString[13] = calcChecksum(productString[:13])
 	// Send set product string
 	err = c.Send(productString)
 	if err != nil {

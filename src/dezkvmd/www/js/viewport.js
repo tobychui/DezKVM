@@ -1,5 +1,9 @@
 /*
     viewport.js
+
+    This script handles various functionalities for the KVM viewport,
+    including mass storage switching, audio quality management, resolution
+    management, and UI interactions.
 */
 let massStorageSwitchURL = "/api/v1/mass_storage/switch"; //side accept kvm or remote
 let resolutionsAPIURL = "/api/v1/resolutions/{uuid}";
@@ -13,6 +17,12 @@ if (!localStorage.getItem('audioQuality')) {
     localStorage.setItem('audioQuality', 'standard');
 }
 let currentAudioQuality = localStorage.getItem('audioQuality');
+
+// Scale to fit setting
+if (!localStorage.getItem('scaleToFit')) {
+    localStorage.setItem('scaleToFit', 'false');
+}
+let isScaleToFit = localStorage.getItem('scaleToFit') === 'true';
 
 // CSRF-protected AJAX function
 $.cjax = function(payload){
@@ -45,6 +55,11 @@ $(document).ready(function() {
     
     // Set audio quality dropdown to saved preference
     $('#audioQualitySelect').val(currentAudioQuality);
+    
+    // Apply scale to fit setting if enabled
+    if (isScaleToFit) {
+        applyScaleToFit();
+    }
 });
 
 
@@ -366,7 +381,7 @@ function reconnectStreams() {
         startHidWebSocket();
 
         // Change the img src to force reload
-        $("#remoteCapture").attr('src', $("#remoteCapture").attr('src') + "?t=" + Date.now());
+        $("#" + streamingContainerId).attr('src', $("#" + streamingContainerId).attr('src') + "?t=" + Date.now());
         
         // Audio will be restarted when user clicks on the video (with current quality setting)
         console.log('Streams reconnected');
@@ -410,6 +425,9 @@ function prepareStreamsReconnection() {
         audioFrontendStarted = false;
     }
     disconnectRemote();
+    
+    // Detach event listeners before reconnection
+    detachHidEventListeners();
 }
 
 function resumeSession(event) {
@@ -422,6 +440,9 @@ function resumeSession(event) {
     setTimeout(function() {
         // Reload the video stream
         setStreamingSource(kvmDeviceUUID);
+        
+        // Re-attach event listeners before starting HID WebSocket
+        attachHidEventListeners();
         
         // Restart HID WebSocket
         startHidWebSocket();
@@ -449,3 +470,72 @@ function disconnect() {
     window.location.href = "no_session.html";
 }
 
+/* 
+    Scale to Fit Functionality 
+*/
+function toggleScaleToFit() {
+    isScaleToFit = !isScaleToFit;
+    localStorage.setItem('scaleToFit', isScaleToFit.toString());
+    
+    if (isScaleToFit) {
+        applyScaleToFit();
+        console.log('Scale to Fit mode enabled');
+    } else {
+        removeScaleToFit();
+        console.log('Actual Resolution mode enabled');
+    }
+}
+
+function applyScaleToFit() {
+    const remoteCaptureEle = document.getElementById(streamingContainerId);
+    if (!remoteCaptureEle) {
+        console.error('Remote capture element not found');
+        return;
+    }
+    
+    // Add scale-to-fit class
+    remoteCaptureEle.classList.add('scale-to-fit');
+    $("#btnScaleToFit i").removeClass("expand arrows alternate").addClass("compress arrows alternate");
+}
+
+function removeScaleToFit() {
+    const remoteCaptureEle = document.getElementById(streamingContainerId);
+    if (!remoteCaptureEle) {
+        console.error('Remote capture element not found');
+        return;
+    }
+    
+    // Remove scale-to-fit class
+    remoteCaptureEle.classList.remove('scale-to-fit');
+    $("#btnScaleToFit i").removeClass("compress arrows alternate").addClass("expand arrows alternate");
+}
+
+// Determine which edge (width or height) should be bound when scaling to fit
+// return the edge that is currently bound (occupy 100% of the container): "width" or "height"
+function getScaleToFitBoundEdge() {
+    const img = document.getElementById(streamingContainerId);
+    if (!img) {
+        console.error('Remote capture element not found');
+        return null;
+    }
+
+    const [width, height] = getCurrentStreamingResolution();
+    
+    if (isNaN(width) || isNaN(height)) {
+        console.error('Invalid resolution values');
+        return null;
+    }
+    
+    const container = img.parentElement;
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+    
+    const imageAspect = width / height;
+    const containerAspect = containerWidth / containerHeight;
+    
+    if (imageAspect > containerAspect) {
+        return "width";
+    } else {
+        return "height";
+    }
+}

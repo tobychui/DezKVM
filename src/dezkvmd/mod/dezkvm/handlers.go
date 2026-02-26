@@ -145,3 +145,15 @@ func (d *DezkVM) HandleChangeResolution(w http.ResponseWriter, r *http.Request, 
 		"message": "Resolution changed successfully. Please reconnect to the stream.",
 	})
 }
+
+// HandleScreenshot handles the request to capture a screenshot from the video device
+func (d *DezkVM) HandleScreenshot(w http.ResponseWriter, r *http.Request, instanceUuid string) {
+	targetInstance, err := d.GetInstanceByUUID(instanceUuid)
+	if err != nil {
+		http.Error(w, "Instance with specified UUID not found", http.StatusNotFound)
+		return
+	}
+
+	// Serve the screenshot
+	targetInstance.usbCaptureDevice.ServeScreenshot(w, r)
+}

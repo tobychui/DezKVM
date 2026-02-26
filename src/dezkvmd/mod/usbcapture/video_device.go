@@ -7,6 +7,8 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"log"
 	"mime/multipart"
 	"net/http"
@@ -496,4 +498,160 @@ func getFormatType(fmtStr string) v4l2.FourCCType {
 		return v4l2.PixelFmtRGB24
 	}
 	return v4l2.PixelFmtMPEG
+}
+
+// CaptureScreenshot captures a single frame from the video device and returns it as JPEG
+// This function can be called even if the device is not currently streaming
+// If the device is already capturing, it will use the current stream
+// If not, it will temporarily open the device, capture one frame, and close it
+func (i *Instance) CaptureScreenshot() ([]byte, error) {
+	// If device is already capturing, grab a frame from the current stream
+	if i.Capturing && i.frames_buff != nil {
+		// Flush the first 5 frames as they may be blank/invalid
+		for j := 0; j < 5; j++ {
+			select {
+			case <-i.frames_buff:
+				// Discard this frame
+			case <-time.After(1 * time.Second):
+				// Timeout flushing, continue
+			}
+		}
+		select {
+		case frame := <-i.frames_buff:
+			if len(frame) > 0 && isJPEG(frame) {
+				return frame, nil
+			}
+			return nil, fmt.Errorf("invalid frame received from stream")
+		case <-time.After(5 * time.Second):
+			return nil, fmt.Errorf("timeout waiting for frame from active stream")
+		}
+	}
+
+	// Device is not capturing, we need to temporarily open it
+	devName := i.Config.VideoDeviceName
+
+	// Check if the video device is a capture device
+	isCaptureDev, err := CheckVideoCaptureDevice(devName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check video device: %w", err)
+	}
+	if !isCaptureDev {
+		return nil, fmt.Errorf("device %s is not a video capture device", devName)
+	}
+
+	// Get supported resolutions and pick the first available one
+	formats, err := GetV4L2FormatInfo(devName)
+	if err != nil || len(formats) == 0 {
+		return nil, fmt.Errorf("failed to get device formats: %w", err)
+	}
+
+	// Find the first MJPEG format with a valid resolution
+	var width, height, fps int
+	found := false
+	for _, format := range formats {
+		if strings.ToLower(format.Format) == "mjpeg" && len(format.Sizes) > 0 {
+			// Pick the first available size
+			size := format.Sizes[0]
+			width = size.Width
+			height = size.Height
+			if len(size.FPS) > 0 {
+				fps = size.FPS[0]
+			} else {
+				fps = 15 // Default fallback
+			}
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return nil, fmt.Errorf("no MJPEG format found for device")
+	}
+
+	// Open the device temporarily with buffer for multiple frames
+	camera, err := device.Open(devName,
+		device.WithIOType(v4l2.IOTypeMMAP),
+		device.WithPixFormat(v4l2.PixFormat{
+			PixelFormat: v4l2.PixelFmtMJPEG,
+			Width:       uint32(width),
+			Height:      uint32(height),
+			Field:       v4l2.FieldAny,
+		}),
+		device.WithFPS(uint32(fps)),
+		device.WithBufferSize(2), // Buffer size for frame capture
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open video device for screenshot: %w", err)
+	}
+	defer camera.Close()
+
+	// Start capture
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := camera.Start(ctx); err != nil {
+		return nil, fmt.Errorf("failed to start capture: %w", err)
+	}
+
+	// Get frames channel
+	frames := camera.GetOutput()
+
+	// Flush the first 5 frames as they may be blank/invalid
+	log.Printf("Flushing first 5 frames from newly opened device...")
+	for i := 0; i < 5; i++ {
+		select {
+		case <-frames:
+			// Discard this frame
+		case <-ctx.Done():
+			return nil, fmt.Errorf("timeout flushing initial frames")
+		}
+	}
+
+	// Now get the actual screenshot frame
+	select {
+	case frame := <-frames:
+		if len(frame) > 0 && isJPEG(frame) {
+			log.Printf("Screenshot captured successfully from device")
+			return frame, nil
+		}
+		return nil, fmt.Errorf("invalid frame captured")
+	case <-ctx.Done():
+		return nil, fmt.Errorf("timeout capturing screenshot")
+	}
+}
+
+// ServeScreenshot serves a single JPEG screenshot via HTTP
+// This is useful for preview thumbnails in the web UI
+func (i *Instance) ServeScreenshot(w http.ResponseWriter, req *http.Request) {
+	// Capture screenshot
+	screenshot, err := i.CaptureScreenshot()
+	if err != nil {
+		log.Printf("Failed to capture screenshot: %v", err)
+
+		// Return a placeholder error image
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.WriteHeader(http.StatusInternalServerError)
+
+		// Create a simple error placeholder image
+		img := image.NewRGBA(image.Rect(0, 0, 320, 240))
+		// Fill with dark gray
+		for y := 0; y < 240; y++ {
+			for x := 0; x < 320; x++ {
+				img.Set(x, y, image.Black)
+			}
+		}
+
+		var buf bytes.Buffer
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80}); err == nil {
+			w.Write(buf.Bytes())
+		}
+		return
+	}
+
+	// Serve the screenshot
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Content-Length", fmt.Sprint(len(screenshot)))
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.WriteHeader(http.StatusOK)
+	w.Write(screenshot)
 }

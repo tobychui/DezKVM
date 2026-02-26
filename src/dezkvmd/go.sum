@@ -1,11 +1,5 @@
 github.com/boltdb/bolt v1.3.1 h1:JQmyP4ZBrce+ZQu0dY660FMfatumYDLun9hBCUVIkF4=
 github.com/boltdb/bolt v1.3.1/go.mod h1:clJnj/oiGkjum5o1McbSZDSLxVThjynRyGBgiAx27Ps=
-github.com/gen2brain/x264-go v0.3.1 h1:XFi6y8HM5BCMrP4kR/o711iBU++XNfLOY3PG8Alz2kU=
-github.com/gen2brain/x264-go v0.3.1/go.mod h1:+Z4VKXQrUKzbfEv36GyiyjXfixmOp2c820ugsMthW18=
-github.com/gen2brain/x264-go/x264c v0.0.0-20241022182000-732e1bdb7da2 h1:aS40m/Q+6z0ID7EVegxnnw3lWHUceGbg0zucbo7335I=
-github.com/gen2brain/x264-go/x264c v0.0.0-20241022182000-732e1bdb7da2/go.mod h1:r2t0/BO5YgPRwWQpLYO5iB5FLSj1ArTQc/zmAoAV7sQ=
-github.com/gen2brain/x264-go/yuv v0.0.0-20241022182000-732e1bdb7da2 h1:bqM055OxaqM/IPFGU84u0ROJW2wvvC3KGEAQuT+3WBs=
-github.com/gen2brain/x264-go/yuv v0.0.0-20241022182000-732e1bdb7da2/go.mod h1:tVJ40WrnqgDLb+itPvllvybW0/3jz5BzUFrEHvYIoGU=
 github.com/google/gofuzz v1.2.0 h1:xRy4A+RhZaiKjJ1bPfwQ8sedCA+YS2YcCHW6ec7JMi0=
 github.com/google/gofuzz v1.2.0/go.mod h1:dBl0BpW6vV/+mYPU4Po3pmUjxk6FQPldtuIdl/M65Eg=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
