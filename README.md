@@ -179,6 +179,14 @@ By default, MS2109 HDMI capture card support the following resolutions. If you a
 
 The USBKVM-App is a debug tool for the USB-KVM section of the DezKVM build that also serve as a USB-KVM viewer. It is used for checking if the USB-KVM subsystem works before integrating into a larger IP-KVM system. See `tools/usbkvm-app/` for more information.
 
+## Screenshots
+
+![image-20260226202939742](img/README/image-20260226202939742.png)
+
+![image-20260226203132579](img/README/image-20260226203132579.png)
+
+![image-20260226202825231](img/README/image-20260226202825231.png)
+
 ## License
 
 DezKVM
