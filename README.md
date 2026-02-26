@@ -57,7 +57,7 @@ Because of this design philosophy:
 
 ## Comparison
 
-| Feature                     | DezKVM                 | PiKVM                           | JetKVM          | GiNet KVM       |
+| Feature                     | DezKVM                 | PiKVM                           | JetKVM          | GL.iNet KVM       |
 | --------------------------- | ---------------------- | ------------------------------- | --------------- | --------------- |
 | Open Source                 | ✅ Fully                | ✅ Mostly                        | ⚠️ Partial       | ❌ No            |
 | DIY Friendly                | ✅ Yes                  | ✅ Mostly (v1 & v2)              | ❌ No            | ❌ No            |
