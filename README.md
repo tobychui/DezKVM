@@ -23,19 +23,7 @@ If you are looking for a KVM over USB or USB-KVM device, visit [DezKVM Go](https
 
 ## Why DezKVM Exists
 
-Modern infrastructure still depends heavily on physical console access.
-
-When systems fail, networks misconfigure, or operating systems refuse to boot, remote access methods such as SSH, RDP, or web dashboards stop working. At that point, only a physical keyboard, monitor, and mouse can recover the machine.
-
-Commercial IP-KVM solutions solve this problem — but they are often:
-
-- Expensive
-- Proprietary
-- Difficult to scale
-- Locked to vendor ecosystems
-- Overkill for homelabs and small deployments
-
-Existing DIY solutions significantly reduce cost, but many still rely on custom kernels, FPGA designs, or tightly coupled hardware platforms. 
+Existing DIY solutions significantly reduce cost compare to commercial solutions, but many still rely on custom kernels, specific SBC provided IO, or tightly coupled hardware platforms. 
 
 **DezKVM takes a different approach.** 
 
@@ -49,11 +37,11 @@ Instead of reinventing drivers or hardware stacks, DezKVM builds entirely on top
 
 Because of this design philosophy:
 
-✅ No custom kernel patches / proprietary drivers
-✅ Works on most Linux SBCs and mini PCs (as host)
-✅ High compatibility on different (remote) computers
-✅ Easy multi-port scaling
-✅ Long-term maintainability 
+- No custom kernel patches / proprietary drivers
+- Works on most Linux SBCs and mini PCs (as host)
+- High compatibility on different (remote) computers
+- Easy multi-port scaling
+
 
 ## Comparison
 
@@ -158,7 +146,7 @@ See `firmware/README.md`
 
 ### Video Capture Configs
 
-By default, MS2109 HDMI capture card support the following resolutions. If you are connecting to your RemdesKVM via the internet (not recommended), pick a resolution and fps combination that best fit your network **upload** bandwidth. If you are using your RemdesKVM within your internal management network, you can just pick the FHD 25 / 30fps option since local area network are at least 100mbps at the time of writing.
+By default, MS2109 HDMI capture card support the following resolutions. If you are connecting to your DezKVM via the internet (not recommended), pick a resolution and fps combination that best fit your network **upload** bandwidth. If you are using your DezKVM within your internal management network, you can just pick the FHD 25 / 30fps option since local area network are at least 100mbps at the time of writing.
 
 ```
 // FHD
