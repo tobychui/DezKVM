@@ -1,0 +1,1 @@
+.\eeprom_write.exe -font="font.ttf" -fontwidth=16 -fontheight=16 -fontsize=13 -offsetx=4 -offsety=2

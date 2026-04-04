@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OLED Image Frame Buffer Generator</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d0d0d;
+    color: #ccc;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    padding: 20px;
+    user-select: none;
+  }
+
+  h1 {
+    color: #00FFB4;
+    font-size: 1.2em;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h1::before {
+    content: '';
+    display: inline-block;
+    width: 6px; height: 20px;
+    background: #00FFB4;
+    border-radius: 2px;
+  }
+  .tag {
+    display: inline-block;
+    background: #001a12;
+    border: 1px solid #00FFB430;
+    color: #00FFB4;
+    font-size: 0.7em;
+    padding: 2px 8px;
+    border-radius: 20px;
+    vertical-align: middle;
+    margin-left: 6px;
+    font-weight: 400;
+  }
+
+  .layout {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+  }
+
+  /* ── sidebar ─────────────────────────── */
+  .sidebar {
+    width: 180px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .panel {
+    background: #161616;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .panel-title {
+    font-size: 0.65em;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #222;
+  }
+
+  /* ── tool buttons ─────────────────────── */
+  .tool-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+  }
+  .tool-btn {
+    background: #1e1e1e;
+    border: 1px solid #333;
+    color: #888;
+    padding: 8px 4px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.78em;
+    text-align: center;
+    line-height: 1.3;
+    transition: all 0.12s;
+  }
+  .tool-btn:hover { border-color: #555; color: #bbb; }
+  .tool-btn.active { border-color: #00FFB4; color: #00FFB4; background: #001a12; }
+  .tool-btn .icon { font-size: 1.3em; display: block; margin-bottom: 2px; }
+
+  /* ── zoom buttons ─────────────────────── */
+  .zoom-row {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .zoom-btn {
+    flex: 1;
+    min-width: 28px;
+    background: #1e1e1e;
+    border: 1px solid #2a2a2a;
+    color: #666;
+    padding: 5px 3px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.72em;
+    text-align: center;
+    transition: all 0.1s;
+  }
+  .zoom-btn:hover { border-color: #444; color: #999; }
+  .zoom-btn.active { border-color: #00FFB4; color: #00FFB4; background: #001a12; }
+
+  /* ── checkbox ─────────────────────────── */
+  .check-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.8em;
+    color: #666;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  .check-row input { accent-color: #00FFB4; cursor: pointer; }
+
+  /* ── small text inputs ────────────────── */
+  .field-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .field-row label { font-size: 0.75em; color: #666; min-width: 34px; }
+  .field-row input[type=text] {
+    flex: 1;
+    background: #111;
+    border: 1px solid #2a2a2a;
+    color: #ccc;
+    padding: 5px 8px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.82em;
+    outline: none;
+    transition: border-color 0.12s;
+  }
+  .field-row input:focus { border-color: #00FFB4; }
+
+  /* ── action buttons ───────────────────── */
+  .btn {
+    display: block;
+    width: 100%;
+    background: #1e1e1e;
+    border: 1px solid #333;
+    color: #aaa;
+    padding: 8px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.8em;
+    text-align: center;
+    transition: all 0.12s;
+    margin-bottom: 5px;
+  }
+  .btn:hover { background: #2a2a2a; color: #ddd; border-color: #555; }
+  .btn.primary {
+    background: #00FFB4;
+    color: #000;
+    border-color: transparent;
+    font-weight: 700;
+  }
+  .btn.primary:hover { background: #00dda0; }
+  .btn.danger { color: #FF6666; border-color: #552222; }
+  .btn.danger:hover { background: #1a0a0a; border-color: #884444; }
+
+  /* ── canvas area ──────────────────────── */
+  .canvas-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .canvas-wrap {
+    background: #000;
+    border: 2px solid #1e1e1e;
+    border-radius: 6px;
+    display: inline-block;
+    line-height: 0;
+    cursor: crosshair;
+    box-shadow: 0 0 30px #00FFB408;
+    position: relative;
+  }
+  canvas {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  .canvas-meta {
+    font-size: 0.72em;
+    color: #333;
+    margin-top: 4px;
+    display: flex;
+    gap: 14px;
+  }
+  .canvas-meta .coords { color: #555; }
+
+  /* ── command output ───────────────────── */
+  .cmd-panel {
+    background: #161616;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 2px;
+  }
+  .cmd-btn-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .cmd-btn-row .btn {
+    width: auto;
+    flex: 1;
+    min-width: 130px;
+    margin: 0;
+  }
+  #cmd-output {
+    background: #090909;
+    border: 1px solid #1e1e1e;
+    color: #00FF99;
+    font-family: 'Courier New', monospace;
+    font-size: 0.78em;
+    padding: 10px;
+    border-radius: 5px;
+    word-break: break-all;
+    white-space: pre-wrap;
+    min-height: 40px;
+    line-height: 1.6;
+  }
+  #cmd-output.empty { color: #333; font-style: italic; }
+
+  /* ── file input hidden ────────────────── */
+  #file-input { display: none; }
+</style>
+</head>
+<body>
+
+<h1>OLED Image Frame Buffer Generator <span class="tag">128 × 64 px</span></h1>
+
+<div class="layout">
+
+  <!-- ── Sidebar ─────────────────────────────────── -->
+  <div class="sidebar">
+
+    <!-- Tools -->
+    <div class="panel">
+      <div class="panel-title">Tool</div>
+      <div class="tool-grid">
+        <button class="tool-btn active" id="tool-pencil"  onclick="setTool('pencil')">
+          <span class="icon">✏️</span>Pencil
+        </button>
+        <button class="tool-btn" id="tool-eraser" onclick="setTool('eraser')">
+          <span class="icon">🧹</span>Eraser
+        </button>
+        <button class="tool-btn" id="tool-fill"   onclick="setTool('fill')">
+          <span class="icon">🪣</span>Fill
+        </button>
+        <button class="tool-btn" id="tool-line"   onclick="setTool('line')">
+          <span class="icon">╱</span>Line
+        </button>
+        <button class="tool-btn" id="tool-rect"   onclick="setTool('rect')">
+          <span class="icon">▭</span>Rect
+        </button>
+        <button class="tool-btn" id="tool-circle" onclick="setTool('circle')">
+          <span class="icon">○</span>Circle
+        </button>
+      </div>
+    </div>
+
+    <!-- Zoom -->
+    <div class="panel">
+      <div class="panel-title">Zoom</div>
+      <div class="zoom-row">
+        <button class="zoom-btn" onclick="setZoom(3)">3×</button>
+        <button class="zoom-btn" onclick="setZoom(4)">4×</button>
+        <button class="zoom-btn active" onclick="setZoom(6)">6×</button>
+        <button class="zoom-btn" onclick="setZoom(8)">8×</button>
+      </div>
+      <label class="check-row" style="margin-top:10px">
+        <input type="checkbox" id="grid-toggle" onchange="render()" checked>
+        Grid overlay
+      </label>
+    </div>
+
+    <!-- Font / Send settings -->
+    <div class="panel">
+      <div class="panel-title">Settings</div>
+      <div class="field-row">
+        <label>Port</label>
+        <input type="text" id="port-input" value="COM5">
+      </div>
+      <div class="field-row">
+        <label>Baud</label>
+        <input type="text" id="baud-input" value="115200">
+      </div>
+      <div class="field-row">
+        <label>Size</label>
+        <input type="text" id="size-input" value="8" placeholder="8 or 16">
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="panel">
+      <div class="panel-title">Canvas</div>
+      <button class="btn" onclick="document.getElementById('file-input').click()">📂 Import PNG</button>
+      <input type="file" id="file-input" accept="image/png,image/jpeg,image/bmp" onchange="importImage(event)">
+      <button class="btn danger" onclick="clearCanvas()">🗑 Clear</button>
+      <button class="btn" onclick="invertCanvas()">⊞ Invert</button>
+    </div>
+
+  </div>
+
+  <!-- ── Main drawing area ───────────────────────── -->
+  <div class="canvas-area">
+
+    <div>
+      <div id="canvas-wrap" class="canvas-wrap"
+        oncontextmenu="return false"
+        onmousedown="onMouseDown(event)"
+        onmousemove="onMouseMove(event)"
+        onmouseup="onMouseUp(event)"
+        onmouseleave="onMouseUp(event)">
+        <canvas id="main-canvas"></canvas>
+      </div>
+      <div class="canvas-meta">
+        <span>128 × 64 px — monochrome 1-bit</span>
+        <span class="coords" id="coords">x=—, y=—</span>
+      </div>
+    </div>
+
+    <!-- Command panel -->
+    <div class="cmd-panel">
+      <div class="panel-title">Export &amp; Command</div>
+      <div class="cmd-btn-row">
+        <button class="btn primary" onclick="generateCommand()">⚡ Generate Command</button>
+        <button class="btn" onclick="downloadPNG()">💾 Download PNG</button>
+        <button class="btn" id="copy-btn" onclick="copyCommand()">📋 Copy</button>
+      </div>
+      <div id="cmd-output" class="empty">Click "Generate Command" to produce the eeprom_render_tester command.</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// Constants
+// ═══════════════════════════════════════════════════════
+const W = 128, H = 64;
+
+// ═══════════════════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════════════════
+const fb = new Uint8Array(W * H); // 0 = off, 1 = on
+let zoom     = 6;
+let tool     = 'pencil';
+let drawing  = false;
+let drawVal  = 1;           // 1 = set, 0 = clear
+let prevCell = null;        // last cell touched during drag
+let shapeStart = null;      // {x, y} for line/rect/circle preview
+let fbSnapshot = null;      // snapshot before shape drag
+
+// ═══════════════════════════════════════════════════════
+// DOM helpers
+// ═══════════════════════════════════════════════════════
+const canvas = document.getElementById('main-canvas');
+const ctx    = canvas.getContext('2d');
+
+function setZoom(z) {
+  zoom = z;
+  canvas.width  = W * zoom;
+  canvas.height = H * zoom;
+  document.querySelectorAll('.zoom-btn').forEach((b, i) => {
+    b.classList.toggle('active', [3,4,6,8][i] === z);
+  });
+  render();
+}
+
+function setTool(t) {
+  tool = t;
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tool-' + t).classList.add('active');
+  if (t === 'fill' || t === 'line' || t === 'rect' || t === 'circle') {
+    canvas.style.cursor = 'crosshair';
+  } else {
+    canvas.style.cursor = 'crosshair';
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// Framebuffer access
+// ═══════════════════════════════════════════════════════
+function getPixel(x, y)       { return fb[y * W + x]; }
+function setPixel(x, y, val)  { if (x >= 0 && x < W && y >= 0 && y < H) fb[y * W + x] = val; }
+
+// ═══════════════════════════════════════════════════════
+// Render
+// ═══════════════════════════════════════════════════════
+function render() {
+  const showGrid = document.getElementById('grid-toggle').checked;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Background
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Pixels
+  ctx.fillStyle = '#00FFB4';
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (fb[y * W + x]) {
+        ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
+      }
+    }
+  }
+
+  // Grid
+  if (showGrid && zoom >= 4) {
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth   = 1;
+    for (let x = 1; x < W; x++) {
+      ctx.beginPath();
+      ctx.moveTo(x * zoom + 0.5, 0);
+      ctx.lineTo(x * zoom + 0.5, canvas.height);
+      ctx.stroke();
+    }
+    for (let y = 1; y < H; y++) {
+      ctx.beginPath();
+      ctx.moveTo(0, y * zoom + 0.5);
+      ctx.lineTo(canvas.width, y * zoom + 0.5);
+      ctx.stroke();
+    }
+  }
+}
+
+// Preview overlay for line/rect/circle (drawn from snapshot)
+function renderPreview(x0, y0, x1, y1) {
+  fb.set(fbSnapshot);
+  if (tool === 'line') {
+    drawLine(x0, y0, x1, y1, drawVal);
+  } else if (tool === 'rect') {
+    drawRect(x0, y0, x1, y1, drawVal);
+  } else if (tool === 'circle') {
+    drawCircle(x0, y0, x1, y1, drawVal);
+  }
+  render();
+}
+
+// ═══════════════════════════════════════════════════════
+// Mouse events
+// ═══════════════════════════════════════════════════════
+function cellFromEvent(e) {
+  const rect = canvas.getBoundingClientRect();
+  const cx   = Math.floor((e.clientX - rect.left) / zoom);
+  const cy   = Math.floor((e.clientY - rect.top)  / zoom);
+  if (cx < 0 || cx >= W || cy < 0 || cy >= H) return null;
+  return { x: cx, y: cy };
+}
+
+function onMouseDown(e) {
+  const cell = cellFromEvent(e);
+  if (!cell) return;
+  drawing   = true;
+  drawVal   = (e.button === 2) ? 0 : 1; // right-click = erase
+
+  if (tool === 'pencil' || tool === 'eraser') {
+    const val = (tool === 'eraser') ? 0 : drawVal;
+    setPixel(cell.x, cell.y, val);
+    prevCell = cell;
+    render();
+  } else if (tool === 'fill') {
+    floodFill(cell.x, cell.y, drawVal);
+    render();
+    drawing = false;
+  } else if (tool === 'line' || tool === 'rect' || tool === 'circle') {
+    fbSnapshot = fb.slice();
+    shapeStart = cell;
+  }
+}
+
+function onMouseMove(e) {
+  const cell = cellFromEvent(e);
+  document.getElementById('coords').textContent =
+    cell ? `x=${cell.x}, y=${cell.y}` : 'x=—, y=—';
+
+  if (!drawing || !cell) return;
+
+  if (tool === 'pencil' || tool === 'eraser') {
+    if (prevCell && (prevCell.x !== cell.x || prevCell.y !== cell.y)) {
+      const val = (tool === 'eraser') ? 0 : drawVal;
+      // Bresenham line between prevCell and cell for smooth strokes
+      drawBresenham(prevCell.x, prevCell.y, cell.x, cell.y, val);
+    }
+    prevCell = cell;
+    render();
+  } else if ((tool === 'line' || tool === 'rect' || tool === 'circle') && shapeStart) {
+    renderPreview(shapeStart.x, shapeStart.y, cell.x, cell.y);
+  }
+}
+
+function onMouseUp(e) {
+  if (!drawing) return;
+  drawing = false;
+  prevCell = null;
+  shapeStart = null;
+  fbSnapshot = null;
+}
+
+// ═══════════════════════════════════════════════════════
+// Drawing primitives
+// ═══════════════════════════════════════════════════════
+function drawBresenham(x0, y0, x1, y1, val) {
+  let dx = Math.abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+  let dy = -Math.abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy;
+  while (true) {
+    setPixel(x0, y0, val);
+    if (x0 === x1 && y0 === y1) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x0 += sx; }
+    if (e2 <= dx) { err += dx; y0 += sy; }
+  }
+}
+
+function drawLine(x0, y0, x1, y1, val) {
+  drawBresenham(x0, y0, x1, y1, val);
+}
+
+function drawRect(x0, y0, x1, y1, val) {
+  const lx = Math.min(x0, x1), rx = Math.max(x0, x1);
+  const ly = Math.min(y0, y1), ry = Math.max(y0, y1);
+  for (let x = lx; x <= rx; x++) { setPixel(x, ly, val); setPixel(x, ry, val); }
+  for (let y = ly; y <= ry; y++) { setPixel(lx, y, val); setPixel(rx, y, val); }
+}
+
+function drawCircle(x0, y0, x1, y1, val) {
+  const r = Math.round(Math.hypot(x1 - x0, y1 - y0));
+  let x = 0, y = r, d = 3 - 2 * r;
+  while (y >= x) {
+    [
+      [x0+x, y0+y],[x0-x, y0+y],[x0+x, y0-y],[x0-x, y0-y],
+      [x0+y, y0+x],[x0-y, y0+x],[x0+y, y0-x],[x0-y, y0-x],
+    ].forEach(([px, py]) => setPixel(px, py, val));
+    if (d <= 0) { d += 4*x + 6; }
+    else        { d += 4*(x - y) + 10; y--; }
+    x++;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// Flood fill (4-connected)
+// ═══════════════════════════════════════════════════════
+function floodFill(sx, sy, newVal) {
+  const oldVal = getPixel(sx, sy);
+  if (oldVal === newVal) return;
+  const stack = [[sx, sy]];
+  while (stack.length) {
+    const [x, y] = stack.pop();
+    if (x < 0 || x >= W || y < 0 || y >= H) continue;
+    if (getPixel(x, y) !== oldVal) continue;
+    setPixel(x, y, newVal);
+    stack.push([x+1,y],[x-1,y],[x,y+1],[x,y-1]);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// Canvas actions
+// ═══════════════════════════════════════════════════════
+function clearCanvas() {
+  fb.fill(0);
+  render();
+}
+
+function invertCanvas() {
+  for (let i = 0; i < fb.length; i++) fb[i] ^= 1;
+  render();
+}
+
+function importImage(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const offscreen = document.createElement('canvas');
+      offscreen.width = W; offscreen.height = H;
+      const octx = offscreen.getContext('2d');
+      octx.fillStyle = '#000';
+      octx.fillRect(0, 0, W, H);
+      octx.drawImage(img, 0, 0, W, H);
+      const data = octx.getImageData(0, 0, W, H).data;
+      for (let i = 0; i < W * H; i++) {
+        const r = data[i*4], g = data[i*4+1], b = data[i*4+2], a = data[i*4+3];
+        if (a < 128) { fb[i] = 0; continue; }
+        const lum = 0.299*r + 0.587*g + 0.114*b;
+        fb[i] = lum > 127 ? 1 : 0;
+      }
+      render();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+  // Reset file input so the same file can be re-imported
+  event.target.value = '';
+}
+
+// ═══════════════════════════════════════════════════════
+// PNG export helpers
+// ═══════════════════════════════════════════════════════
+function buildPNGCanvas() {
+  const off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  const octx = off.getContext('2d');
+  octx.fillStyle = '#000';
+  octx.fillRect(0, 0, W, H);
+  octx.fillStyle = '#fff';
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++)
+      if (fb[y * W + x]) octx.fillRect(x, y, 1, 1);
+  return off;
+}
+
+function downloadPNG() {
+  const off = buildPNGCanvas();
+  const a   = document.createElement('a');
+  a.download = 'oled_image.png';
+  a.href     = off.toDataURL('image/png');
+  a.click();
+}
+
+function getBase64PNG() {
+  return buildPNGCanvas().toDataURL('image/png').split(',')[1];
+}
+
+// ═══════════════════════════════════════════════════════
+// Command generation
+// ═══════════════════════════════════════════════════════
+function generateCommand() {
+  const port = (document.getElementById('port-input').value || 'COM5').trim();
+  const baud = (document.getElementById('baud-input').value || '115200').trim();
+  const size = parseInt(document.getElementById('size-input').value) || 8;
+  const b64  = getBase64PNG();
+  const cmd  = `eeprom_render_tester.exe -m image -s ${size} -i "${b64}" -port ${port} -baud ${baud}`;
+  const el   = document.getElementById('cmd-output');
+  el.textContent = cmd;
+  el.classList.remove('empty');
+}
+
+function copyCommand() {
+  const el = document.getElementById('cmd-output');
+  if (el.classList.contains('empty')) return;
+  navigator.clipboard.writeText(el.textContent).then(() => {
+    const btn = document.getElementById('copy-btn');
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// Init
+// ═══════════════════════════════════════════════════════
+setZoom(6);
+render();
+</script>
+</body>
+</html>

@@ -27,10 +27,10 @@
             <button class="ui mini icon button" id="btnStorageRemote" onclick="switchMassStorageToRemote()" title="Switch Storage to Remote">
                 <i class="cloud upload icon"></i>
             </button>
-            <select id="resolutionSelect" class="ui compact dropdown" onchange="changeResolution(this.value)">
+            <select id="resolutionSelect" class="ui compact dropdown" onchange="changeResolution(this.value)" style="display:none;">
                 <option value="">Loading resolutions...</option>
             </select>
-            <select id="audioQualitySelect" class="ui compact dropdown" onchange="changeAudioQuality(this.value)">
+            <select id="audioQualitySelect" class="ui compact dropdown" onchange="changeAudioQuality(this.value)" style="display:none;">
                 <option value="disabled">Audio Off</option>
                 <option value="low">Low (16kHz)</option>
                 <option value="standard">Standard (24kHz)</option>
@@ -60,28 +60,14 @@
              <button class="ui mini basic icon button" id="btnFullScreen" onclick="toggleFullScreen()" title="Fullscreen">
                 <i style="font-weight: bolder;" class="expand icon"></i>
             </button>
+            <button class="ui mini basic icon button" id="btnOpenSettings" onclick="openSettingsOverlay()" title="Settings">
+                <i style="font-weight: bolder;" class="cog icon"></i>
+            </button>
             <button class="ui mini basic icon button" id="btnToggleAdvanceMenu" onclick="toggleAdvanceMenu()" title="Show/Hide Advanced Menu">
                 <i style="font-weight: bolder;" class="angle down icon"></i>
             </button>
         </div>
         
-    </div>
-
-    <!-- Resolution Change Modal -->
-    <div id="resolutionChangeModal" class="ui small inverted modal">
-        <div class="content" style="text-align: center; padding: 2em;">
-            <div class="ui icon header" style="color: white;">
-                <i class="spinner loading icon"></i>
-                Changing Resolution
-            </div>
-            <p style="font-size: 1.1em; margin-top: 1em; color: white;">
-                Changing resolution of HDMI capture, please wait...
-            </p>
-            <button id="resumeSessionBtn" class="ui basic green button" style="display: none; margin-top: 2em; color: white;" onclick="resumeSession(event);">
-                <i class="green exchange icon"></i>
-                Resume Session
-            </button>
-        </div>
     </div>
 
     <!-- Paste Box Modal -->
@@ -90,7 +76,8 @@
     <!-- Onscreen Keyboard -->
     <div id="onscreenKeyboard" class="onscreen-keyboard" style="display: none;"></div>
    
-
+    <!-- Settings -->
+    <div id="settings-overlay" class=""></div>
     <script src="js/viewport.js"></script>
     <script src="js/kvmevt.js"></script>
     <script src="js/ocr-copy.js"></script>
@@ -101,6 +88,10 @@
 
         $("#pasteBox").load("components/paste-box.html", function() {
             console.log("Paste Box component loaded.");
+        });
+
+        $("#settings-overlay").load("components/settings-overlay.html", function() {
+            console.log("Settings Overlay component loaded.");
         });
     </script>
 </body>

@@ -8,8 +8,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/google/uuid"
+	"imuslab.com/dezkvm/dezkvmd/mod/kvmhid"
 )
 
 const (
@@ -86,6 +88,37 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+
+	case "getchipcfg":
+		//Get and print the current chip configuration
+		kvmCfg, err := loadUsbKvmConfig()
+		if err != nil {
+			log.Fatal("Failed to load or create USB KVM config:", err)
+		}
+		// Initiate the HID controller
+		usbKVM = kvmhid.NewHIDController(&kvmhid.Config{
+			PortName:          kvmCfg.USBKVMDevicePath,
+			BaudRate:          kvmCfg.USBKVMBaudrate,
+			ScrollSensitivity: 0x01, // Set mouse scroll sensitivity
+		})
+
+		//Start the HID controller
+		err = usbKVM.Connect()
+		if err != nil {
+			log.Fatal(err)
+		}
+		for i := 0; i < 3; i++ {
+			time.Sleep(1 * time.Second)
+			cfgData, err := usbKVM.GetChipCurrentConfiguration()
+			if err == nil {
+				fmt.Printf("Current Chip Configuration: %x\n", cfgData)
+				break
+			} else {
+				log.Printf("Attempt %d: Failed to get chip configuration: %v\n", i+1, err)
+			}
+		}
+
+		usbKVM.Close()
 	case "ipkvm":
 		//Check runtime dependencies
 		err := run_dependency_precheck()
@@ -117,6 +150,6 @@ func main() {
 		fmt.Println("Password set successfully.")
 		authManager.Close()
 	default:
-		log.Fatalf("Unknown mode: %s. Supported modes are: usbkvm, capture", *mode)
+		log.Fatalf("Unknown mode: %s. Supported modes are: usbkvm, ipkvm, cfgchip, updateprop, getcfg, setpw", *mode)
 	}
 }

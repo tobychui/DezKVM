@@ -1,0 +1,593 @@
+
+<!-- This document is supposed to be loaded via AJAX into viewport.html -->
+<style>
+/* Settings Overlay Styles */
+#settings-overlay{
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 2000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+}
+
+#settings-overlay.visible{
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.settings-panel{
+    position: relative;
+    width: 720px;
+    max-width: 92vw;
+    height: 80vh;
+    background-color: #f5f5f5;
+    border-radius: 0.8em;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.settings-close-btn{
+    position: absolute;
+    top: 0.5em;
+    right: 0.6em;
+    z-index: 10;
+    background: transparent;
+    border: none;
+    font-size: 1.15em;
+    cursor: pointer;
+    color: #666;
+    padding: 0.3em;
+    line-height: 1;
+    border-radius: 4px;
+    transition: background 0.15s;
+    margin-right: 0 !important;
+}
+
+.settings-close-btn:hover{
+    background: rgba(0,0,0,0.08);
+    color: #333;
+}
+
+.settings-layout{
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Left column – category menu */
+.settings-menu-col{
+    width: 200px;
+    min-width: 170px;
+    background: #eaeaea;
+    border-right: 1px solid #d8d8d8;
+    padding: 1.2em;
+    padding-right: 0.6em;
+    overflow-y: auto;
+}
+
+.settings-category-menu{
+    width: 100% !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+.settings-category-menu .item{
+    border-radius: 6px !important;
+    margin-bottom: 2px !important;
+    padding: 0.75em 1em !important;
+    font-size: 0.92em !important;
+    color: #444 !important;
+    transition: background 0.15s !important;
+}
+
+.settings-category-menu .item:hover{
+    background: rgba(0,0,0,0.06) !important;
+}
+
+.settings-category-menu .item.active{
+    background: rgba(33,133,208,0.14) !important;
+    color: #1a69a4 !important;
+    font-weight: 600 !important;
+}
+
+.settings-category-menu .item i.icon{
+    margin-right: 0.5em;
+    opacity: 0.7;
+}
+
+/* Right column – content */
+.settings-content-col{
+    flex: 1;
+    padding: 1.6em 2em;
+    overflow-y: auto;
+}
+
+.settings-tab-content{
+    display: none;
+}
+
+.settings-tab-content.active{
+    display: block;
+}
+
+.settings-tab-content .ui.header{
+    margin-bottom: 0 !important;
+}
+
+.settings-field{
+    margin-bottom: 1.6em;
+}
+
+.settings-field > label{
+    display: block;
+    font-weight: 600;
+    font-size: 0.95em;
+    margin-bottom: 0.15em;
+    color: #333;
+}
+
+.settings-field .field-description{
+    font-size: 0.85em;
+    color: #777;
+    margin: 0 0 0.6em 0;
+}
+
+.settings-field .ui.dropdown,
+.settings-field select{
+    max-width: 320px;
+}
+
+.settings-field select:disabled{
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.settings-field .ui.checkbox{
+    margin-top: 0.3em;
+}
+
+.settings-field .ui.checkbox label{
+    font-weight: normal !important;
+    color: #555 !important;
+}
+
+/* Responsive: stack on small screens */
+@media (max-width: 580px){
+    .settings-layout{
+        flex-direction: column;
+    }
+
+    .settings-menu-col{
+        width: 100%;
+        min-width: unset;
+        border-right: none;
+        border-bottom: 1px solid #d8d8d8;
+        padding: 0.6em;
+    }
+
+    .settings-category-menu{
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        gap: 0.3em;
+    }
+
+    .settings-category-menu .item{
+        flex: 0 0 auto;
+        margin-bottom: 0 !important;
+    }
+
+    .settings-content-col{
+        padding: 1em;
+    }
+}
+</style>
+<div class="settings-panel">
+    <!-- Close button -->
+    <button class="settings-close-btn ui circular icon button" onclick="closeSettingsOverlay()">
+        <i class="close icon"></i>
+    </button>
+    <div class="settings-layout">
+        <!-- Left: category menu -->
+        <div class="settings-menu-col">
+            <div class="ui secondary vertical menu settings-category-menu">
+                <a class="item active" data-tab="display">
+                    <i class="tv icon"></i> Display
+                </a>
+                <a class="item" data-tab="audio">
+                    <i class="volume up icon"></i> Audio
+                </a>
+                <a class="item" data-tab="storage">
+                    <i class="hdd icon"></i> Storage
+                </a>
+                <a class="item" data-tab="keyboard-mouse">
+                    <i class="keyboard icon"></i> Keyboard &amp; Mouse
+                </a>
+                <a class="item" data-tab="session">
+                    <i class="exchange alternate icon"></i> Session
+                </a>
+            </div>
+        </div>
+        <!-- Right: settings content -->
+        <div class="settings-content-col">
+            <!-- Display -->
+            <div class="settings-tab-content active" data-tab="display">
+                <h3 class="ui header">
+                    <i class="tv icon"></i>
+                    <div class="content">Display</div>
+                </h3>
+                <div class="ui divider"></div>
+
+                <div class="settings-field">
+                    <label>Resolution &amp; Frame Rate</label>
+                    <p class="field-description">Change the HDMI capture resolution and frame rate.</p>
+                    <select id="settingsResolutionSelect" class="ui fluid dropdown" onchange="changeResolution(this.value)">
+                        <option value="">Loading resolutions...</option>
+                    </select>
+                    <div id="resolutionLoadingIndicator" class="ui active small progress" style="display: none; margin-top: 0.8em; max-width: 320px;">
+                        <div class="bar"></div>
+                    </div>
+                </div>
+
+                <div class="settings-field">
+                    <label>Scale to Fit</label>
+                    <p class="field-description">Scale the remote display to fill your browser viewport.</p>
+                    <div class="ui toggle checkbox" id="scaleToFitCheckbox">
+                        <input type="checkbox" id="chkSettingsScaleToFit" onchange="toggleScaleToFit()">
+                        <label>Enable scale to fit mode</label>
+                    </div>
+                </div>
+
+                <div class="settings-field">
+                    <label>Fullscreen</label>
+                    <p class="field-description">Enter or exit browser fullscreen mode.</p>
+                    <button class="ui button" onclick="toggleFullScreen()">
+                        <i class="expand icon"></i> Toggle Fullscreen
+                    </button>
+                </div>
+            </div>
+
+            <!-- Audio -->
+            <div class="settings-tab-content" data-tab="audio">
+                <h3 class="ui header">
+                    <i class="volume up icon"></i>
+                    <div class="content">Audio</div>
+                </h3>
+                <div class="ui divider"></div>
+
+                <div class="settings-field">
+                    <label>Audio Quality</label>
+                    <p class="field-description">Select the audio capture quality. Higher quality uses more bandwidth.</p>
+                    <select id="settingsAudioQualitySelect" class="ui fluid dropdown" onchange="changeAudioQuality(this.value)">
+                        <option value="disabled">Audio Off</option>
+                        <option value="low">Low (16 kHz)</option>
+                        <option value="standard">Standard (24 kHz)</option>
+                        <option value="high">High (48 kHz)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Storage -->
+            <div class="settings-tab-content" data-tab="storage">
+                <h3 class="ui header">
+                    <i class="hdd icon"></i>
+                    <div class="content">Storage</div>
+                </h3>
+                <div class="ui divider"></div>
+
+                <div class="settings-field">
+                    <label>Mass Storage Mode</label>
+                    <p class="field-description">Switch the USB mass-storage device between KVM-local and remote host.</p>
+                    <div class="ui buttons">
+                        <button class="ui button" id="btnSettingsStorageKvm" onclick="switchMassStorageToKvm()">
+                            <i class="hdd icon"></i> KVM
+                        </button>
+                        <div class="or"></div>
+                        <button class="ui button" id="btnSettingsStorageRemote" onclick="switchMassStorageToRemote()">
+                            <i class="cloud upload icon"></i> Remote
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Keyboard & Mouse -->
+            <div class="settings-tab-content" data-tab="keyboard-mouse">
+                <h3 class="ui header">
+                    <i class="keyboard icon"></i>
+                    <div class="content">Keyboard &amp; Mouse</div>
+                </h3>
+                <div class="ui divider"></div>
+
+                <div class="settings-field">
+                    <label>Show Local Cursor</label>
+                    <p class="field-description">Toggle the visibility of the local cursor on the remote display.</p>
+                    <div class="ui toggle checkbox" id="showLocalCursorCheckbox">
+                        <input type="checkbox" id="chkSettingshowLocalCursor" onchange="toggleShowLocalCursor()" checked>
+                        <label>Enable local cursor</label>
+                    </div>
+                </div>
+
+                <div class="settings-field">
+                    <label>Reset HID Device</label>
+                    <p class="field-description">Reset the remote HID (keyboard &amp; mouse) if input becomes unresponsive.</p>
+                    <button class="ui button" onclick="resetRemoteHID()">
+                        <i class="refresh icon"></i> Reset HID
+                    </button>
+                </div>
+
+                <div class="settings-field">
+                    <label>On-Screen Keyboard</label>
+                    <p class="field-description">Show or hide the on-screen virtual keyboard.</p>
+                    <button class="ui button" onclick="toggleOnscreenKeyboard(); closeSettingsOverlay();">
+                        <i class="keyboard icon"></i> Toggle Keyboard
+                    </button>
+                </div>
+
+                <div class="settings-field">
+                    <label>Paste Text</label>
+                    <p class="field-description">Open the paste box to type text into the remote machine.</p>
+                    <button class="ui button" onclick="showPasteBox(); closeSettingsOverlay();">
+                        <i class="paste icon"></i> Open Paste Box
+                    </button>
+                </div>
+
+                <div class="settings-field">
+                    <label>OCR Copy</label>
+                    <p class="field-description">Select a region on screen and extract text using OCR.</p>
+                    <button class="ui button" onclick="showScreenshotSelector(); closeSettingsOverlay();">
+                        <i class="copy icon"></i> Copy with OCR
+                    </button>
+                </div>
+            </div>
+
+            <!-- Session -->
+            <div class="settings-tab-content" data-tab="session">
+                <h3 class="ui header">
+                    <i class="exchange alternate icon"></i>
+                    <div class="content">Session</div>
+                </h3>
+                <div class="ui divider"></div>
+
+                <div class="settings-field">
+                    <label>Disconnect</label>
+                    <p class="field-description">End the current KVM session and return to the home page.</p>
+                    <button class="ui red button" onclick="disconnect()">
+                        <i class="sign out icon"></i> Disconnect
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function(){
+    /* Initialize Fomantic UI checkboxes */
+    if(typeof $ !== 'undefined' && $.fn.checkbox){
+        $('#scaleToFitCheckbox').checkbox();
+        $('#showLocalCursorCheckbox').checkbox();
+    }
+
+    /* Tab switching */
+    $(".settings-category-menu .item").on("click", function(){
+        $(".settings-category-menu .item").removeClass("active");
+        $(this).addClass("active");
+        var tab = $(this).data("tab");
+        $(".settings-tab-content").removeClass("active");
+        $(".settings-tab-content[data-tab='" + tab + "']").addClass("active");
+    });
+
+    /* Sync resolution dropdown from original */
+    function syncResolutionDropdown(){
+        var original = document.getElementById("resolutionSelect");
+        var mirror   = document.getElementById("settingsResolutionSelect");
+        if(!original || !mirror) return;
+        mirror.innerHTML = original.innerHTML;
+        mirror.value = original.value;
+    }
+
+    /* Sync audio dropdown from saved preference */
+    function syncAudioDropdown(){
+        var quality = localStorage.getItem("audioQuality") || "standard";
+        $("#settingsAudioQualitySelect").val(quality);
+    }
+
+    /* Sync scale-to-fit checkbox state */
+    function syncScaleToFit(){
+        var enabled = localStorage.getItem("scaleToFit") === "true";
+        var checkbox = document.getElementById("chkSettingsScaleToFit");
+        if(!checkbox) return;
+        checkbox.checked = enabled;
+        // Initialize Fomantic UI checkbox if not already initialized
+        if(typeof $ !== 'undefined' && $('#scaleToFitCheckbox').checkbox){
+            $('#scaleToFitCheckbox').checkbox(enabled ? 'check' : 'uncheck');
+        }
+    }
+
+    /* Sync show local cursor checkbox state */
+    function syncShowLocalCursor(){
+        var enabled = localStorage.getItem("showLocalCursor");
+        // Default to true if not set
+        if(enabled === null) enabled = "true";
+        enabled = enabled === "true";
+        var checkbox = document.getElementById("chkSettingshowLocalCursor");
+        if(!checkbox) return;
+        checkbox.checked = enabled;
+        // Initialize Fomantic UI checkbox if not already initialized
+        if(typeof $ !== 'undefined' && $('#showLocalCursorCheckbox').checkbox){
+            $('#showLocalCursorCheckbox').checkbox(enabled ? 'check' : 'uncheck');
+        }
+    }
+
+    /* Keep original resolution dropdown in sync when settings dropdown changes */
+    var settingsResSel = document.getElementById("settingsResolutionSelect");
+    if(settingsResSel){
+        settingsResSel.addEventListener("change", function(){
+            var orig = document.getElementById("resolutionSelect");
+            if(orig) orig.value = this.value;
+        });
+    }
+
+    /* Keep original audio dropdown in sync */
+    var settingsAudioSel = document.getElementById("settingsAudioQualitySelect");
+    if(settingsAudioSel){
+        settingsAudioSel.addEventListener("change", function(){
+            var orig = document.getElementById("audioQualitySelect");
+            if(orig) orig.value = this.value;
+        });
+    }
+
+    /* Open / close helpers */
+    window.openSettingsOverlay = function(){
+        syncResolutionDropdown();
+        syncAudioDropdown();
+        syncScaleToFit();
+        syncShowLocalCursor();
+        $("#settings-overlay").addClass("visible");
+    };
+
+    window.closeSettingsOverlay = function(){
+        $("#settings-overlay").removeClass("visible");
+    };
+
+    /* Close on Escape key */
+    $(document).on("keydown.settingsOverlay", function(e){
+        if(e.key === "Escape" && $("#settings-overlay").hasClass("visible")){
+            closeSettingsOverlay();
+        }
+    });
+})();
+
+/* 
+    Scale to Fit Functionality 
+*/
+function toggleScaleToFit() {
+    var checkbox = document.getElementById("chkSettingsScaleToFit");
+    if(checkbox){
+        isScaleToFit = checkbox.checked;
+    } else {
+        isScaleToFit = !isScaleToFit;
+    }
+    localStorage.setItem('scaleToFit', isScaleToFit.toString());
+    
+    if (isScaleToFit) {
+        applyScaleToFit();
+        console.log('Scale to Fit mode enabled');
+    } else {
+        removeScaleToFit();
+        console.log('Actual Resolution mode enabled');
+    }
+}
+
+function applyScaleToFit() {
+    const remoteCaptureEle = document.getElementById(streamingContainerId);
+    if (!remoteCaptureEle) {
+        console.error('Remote capture element not found');
+        return;
+    }
+    
+    // Add scale-to-fit class
+    remoteCaptureEle.classList.add('scale-to-fit');
+    $("#btnScaleToFit i").removeClass("expand arrows alternate").addClass("compress arrows alternate");
+}
+
+function removeScaleToFit() {
+    const remoteCaptureEle = document.getElementById(streamingContainerId);
+    if (!remoteCaptureEle) {
+        console.error('Remote capture element not found');
+        return;
+    }
+    
+    // Remove scale-to-fit class
+    remoteCaptureEle.classList.remove('scale-to-fit');
+    $("#btnScaleToFit i").removeClass("compress arrows alternate").addClass("expand arrows alternate");
+}
+
+// Determine which edge (width or height) should be bound when scaling to fit
+// return the edge that is currently bound (occupy 100% of the container): "width" or "height"
+function getScaleToFitBoundEdge() {
+    const img = document.getElementById(streamingContainerId);
+    if (!img) {
+        console.error('Remote capture element not found');
+        return null;
+    }
+
+    const [width, height] = getCurrentStreamingResolution();
+    
+    if (isNaN(width) || isNaN(height)) {
+        console.error('Invalid resolution values');
+        return null;
+    }
+    
+    const container = img.parentElement;
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+    
+    const imageAspect = width / height;
+    const containerAspect = containerWidth / containerHeight;
+    
+    if (imageAspect > containerAspect) {
+        return "width";
+    } else {
+        return "height";
+    }
+}
+
+/* 
+    Show Local Cursor Functionality 
+*/
+function toggleShowLocalCursor() {
+    var checkbox = document.getElementById("chkSettingshowLocalCursor");
+    var showCursor = true; // default
+    if(checkbox){
+        showCursor = checkbox.checked;
+    }
+    localStorage.setItem('showLocalCursor', showCursor.toString());
+    
+    var remoteCaptureEle = document.getElementById(streamingContainerId);
+    if (!remoteCaptureEle) {
+        console.error('Remote capture element not found');
+        return;
+    }
+    
+    if (showCursor) {
+        remoteCaptureEle.classList.remove('hide-cursor');
+        console.log('Local cursor enabled');
+    } else {
+        remoteCaptureEle.classList.add('hide-cursor');
+        console.log('Local cursor disabled');
+    }
+}
+
+/* Apply saved cursor preference on page load */
+function applyShowLocalCursorPreference() {
+    var showCursor = localStorage.getItem('showLocalCursor');
+    // Default to true if not set
+    if(showCursor === null) showCursor = "true";
+    showCursor = showCursor === "true";
+    
+    var remoteCaptureEle = document.getElementById(streamingContainerId);
+    if (!remoteCaptureEle) {
+        return;
+    }
+    
+    if (showCursor) {
+        remoteCaptureEle.classList.remove('hide-cursor');
+    } else {
+        remoteCaptureEle.classList.add('hide-cursor');
+    }
+}
+
+</script>

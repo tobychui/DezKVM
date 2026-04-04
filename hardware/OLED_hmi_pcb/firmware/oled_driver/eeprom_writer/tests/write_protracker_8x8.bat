@@ -1,0 +1,1 @@
+.\eeprom_write.exe -font="protracker.ttf" -fontwidth=8 -fontheight=8 -fontsize=8 -offsetx=0 -offsety=1

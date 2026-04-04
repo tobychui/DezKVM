@@ -60,6 +60,11 @@ $(document).ready(function() {
     if (isScaleToFit) {
         applyScaleToFit();
     }
+    
+    // Apply show local cursor preference
+    if (typeof applyShowLocalCursorPreference === 'function') {
+        applyShowLocalCursorPreference();
+    }
 });
 
 
@@ -334,8 +339,8 @@ function changeResolution(resolutionValue) {
 
     console.log(`Changing resolution to ${width}x${height} @ ${fps}fps`);
 
-    // Show the resolution change modal
-    showResolutionChangeModal();
+    // Disable dropdowns and show loading state
+    setResolutionDropdownLoading(true);
 
     // Call the API to change resolution
     $.cjax({
@@ -351,12 +356,16 @@ function changeResolution(resolutionValue) {
             console.log('Resolution changed successfully:', response);
             // Prepare streams for reconnection
             prepareStreamsReconnection();
-            // Show resume button
-            showResumeButton();
+            // Automatically resume session
+            autoResumeSession(width, height, fps);
         },
         error: function(xhr, status, error) {
-            hideResolutionChangeModal();
-            alert('Error changing resolution: ' + (xhr.responseText || error));
+            setResolutionDropdownLoading(false);
+            $.toast({
+                class: 'error',
+                message: 'Error changing resolution: ' + (xhr.responseText || error),
+                showProgress: 'bottom'
+            });
             console.error('Error changing resolution:', error);
         }
     });
@@ -385,35 +394,91 @@ function reconnectStreams() {
         
         // Audio will be restarted when user clicks on the video (with current quality setting)
         console.log('Streams reconnected');
-    }, 1000);
+    }, 100);
 }
 
 /* Resolution Change Modal Functions */
-function showResolutionChangeModal() {
-    // Reset modal to original state
-    $('#resolutionChangeModal .icon.header').html('<i class="spinner loading icon"></i> Changing Resolution');
-    $('#resolutionChangeModal p').text('Changing resolution of HDMI capture, please wait...');
-    $('#resumeSessionBtn').hide();
+function setResolutionDropdownLoading(loading) {
+    var resSelect = document.getElementById('resolutionSelect');
+    var settingsResSelect = document.getElementById('settingsResolutionSelect');
+    var loadingIndicator = $('#resolutionLoadingIndicator');
     
-    $('#resolutionChangeModal').modal({
-        closable: false,
-        autofocus: false
-    })
-    .modal('show');
+    if (loading) {
+        // Disable dropdowns
+        if (resSelect) resSelect.disabled = true;
+        if (settingsResSelect) settingsResSelect.disabled = true;
+        
+        // Show and animate loading indicator in settings panel
+        if (loadingIndicator.length) {
+            loadingIndicator.show();
+            loadingIndicator.progress({
+                percent: 100,
+                indicating: true,
+                autoSuccess: false
+            });
+            // Animate progress from 0 to ~90%
+            loadingIndicator.progress('set percent', 0);
+            var percent = 0;
+            window.resolutionLoadingInterval = setInterval(function() {
+                percent += Math.random() * 15;
+                if (percent > 90) percent = 90;
+                loadingIndicator.progress('set percent', percent);
+            }, 200);
+        }
+    } else {
+        // Enable dropdowns
+        if (resSelect) resSelect.disabled = false;
+        if (settingsResSelect) settingsResSelect.disabled = false;
+        
+        // Complete and hide loading indicator
+        if (loadingIndicator.length) {
+            if (window.resolutionLoadingInterval) {
+                clearInterval(window.resolutionLoadingInterval);
+                window.resolutionLoadingInterval = null;
+            }
+            loadingIndicator.progress('set percent', 100);
+            setTimeout(function() {
+                loadingIndicator.hide();
+            }, 300);
+        }
+    }
 }
 
-function hideResolutionChangeModal() {
-    $('#resolutionChangeModal').modal('hide');
-}
-
-function showResumeButton() {
-    // Hide the loading spinner and message
-    $('#resolutionChangeModal .icon.header i').removeClass('spinner loading').addClass('checkmark');
-    $('#resolutionChangeModal .icon.header').html('<i class="green circle check icon"></i> Resolution Changed');
-    $('#resolutionChangeModal p').text('Resolution has been changed successfully!');
+function autoResumeSession(width, height, fps) {
+    console.log('Auto-resuming session...');
     
-    // Show the resume button
-    $('#resumeSessionBtn').show();
+    // Wait a moment for cleanup, then restart everything
+    setTimeout(function() {
+        // Reload the video stream
+        setStreamingSource(kvmDeviceUUID);
+        
+        // Re-attach event listeners before starting HID WebSocket
+        attachHidEventListeners();
+        
+        // Restart HID WebSocket
+        startHidWebSocket();
+
+        // Change the img src to force reload
+        $("#remoteCapture").attr('src', $("#remoteCapture").attr('src') + "?t=" + Date.now());
+        
+        // Restart audio WebSocket with current quality (if not disabled)
+        if (!audioFrontendStarted && currentAudioQuality !== 'disabled') {
+            startAudioWebSocket(currentAudioQuality);
+            audioFrontendStarted = true;
+        }
+        
+        // Re-enable dropdown and hide loading
+        setResolutionDropdownLoading(false);
+        
+        // Show success toast
+        $.toast({
+            message: `<i class="green circle check icon"></i> Resolution changed to ${width}x${height} @ ${fps}fps`,
+            showProgress: 'bottom',
+            classProgress: 'green'
+        });
+        
+        console.log('Session auto-resumed - all streams reconnected');
+    }, 100);
 }
 
 function prepareStreamsReconnection() {
@@ -430,112 +495,8 @@ function prepareStreamsReconnection() {
     detachHidEventListeners();
 }
 
-function resumeSession(event) {
-    console.log('Resuming session...');
-    
-    // Hide the modal
-    hideResolutionChangeModal();
-    
-    // Wait a moment for cleanup, then restart everything
-    setTimeout(function() {
-        // Reload the video stream
-        setStreamingSource(kvmDeviceUUID);
-        
-        // Re-attach event listeners before starting HID WebSocket
-        attachHidEventListeners();
-        
-        // Restart HID WebSocket
-        startHidWebSocket();
-        $.toast({
-            message: 'Reconnecting HID device<br>This will only take a moment',
-            showProgress: 'bottom',
-            classProgress: 'blue'
-        });
-
-        // Change the img src to force reload
-        $("#remoteCapture").attr('src', $("#remoteCapture").attr('src') + "?t=" + Date.now());
-        
-        // Restart audio WebSocket with current quality (if not disabled)
-        if (!audioFrontendStarted && currentAudioQuality !== 'disabled') {
-            startAudioWebSocket(currentAudioQuality);
-            audioFrontendStarted = true;
-        }
-        
-        console.log('Session resumed - all streams reconnected');
-    }, 500);
-}
-
 function disconnect() {
     disconnectRemote();
     window.location.href = "no_session.html";
 }
 
-/* 
-    Scale to Fit Functionality 
-*/
-function toggleScaleToFit() {
-    isScaleToFit = !isScaleToFit;
-    localStorage.setItem('scaleToFit', isScaleToFit.toString());
-    
-    if (isScaleToFit) {
-        applyScaleToFit();
-        console.log('Scale to Fit mode enabled');
-    } else {
-        removeScaleToFit();
-        console.log('Actual Resolution mode enabled');
-    }
-}
-
-function applyScaleToFit() {
-    const remoteCaptureEle = document.getElementById(streamingContainerId);
-    if (!remoteCaptureEle) {
-        console.error('Remote capture element not found');
-        return;
-    }
-    
-    // Add scale-to-fit class
-    remoteCaptureEle.classList.add('scale-to-fit');
-    $("#btnScaleToFit i").removeClass("expand arrows alternate").addClass("compress arrows alternate");
-}
-
-function removeScaleToFit() {
-    const remoteCaptureEle = document.getElementById(streamingContainerId);
-    if (!remoteCaptureEle) {
-        console.error('Remote capture element not found');
-        return;
-    }
-    
-    // Remove scale-to-fit class
-    remoteCaptureEle.classList.remove('scale-to-fit');
-    $("#btnScaleToFit i").removeClass("compress arrows alternate").addClass("expand arrows alternate");
-}
-
-// Determine which edge (width or height) should be bound when scaling to fit
-// return the edge that is currently bound (occupy 100% of the container): "width" or "height"
-function getScaleToFitBoundEdge() {
-    const img = document.getElementById(streamingContainerId);
-    if (!img) {
-        console.error('Remote capture element not found');
-        return null;
-    }
-
-    const [width, height] = getCurrentStreamingResolution();
-    
-    if (isNaN(width) || isNaN(height)) {
-        console.error('Invalid resolution values');
-        return null;
-    }
-    
-    const container = img.parentElement;
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
-    
-    const imageAspect = width / height;
-    const containerAspect = containerWidth / containerHeight;
-    
-    if (imageAspect > containerAspect) {
-        return "width";
-    } else {
-        return "height";
-    }
-}

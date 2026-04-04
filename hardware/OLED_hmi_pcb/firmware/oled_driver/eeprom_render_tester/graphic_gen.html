@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OLED Graphic Generator</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d0d0d;
+    color: #ccc;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    padding: 24px;
+  }
+
+  h1 {
+    color: #00FFB4;
+    font-size: 1.3em;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h1::before {
+    content: '';
+    display: inline-block;
+    width: 6px; height: 22px;
+    background: #00FFB4;
+    border-radius: 2px;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 16px;
+    max-width: 1100px;
+  }
+
+  /* ── panels ─────────────────────────────────────────── */
+  .panel {
+    background: #161616;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .panel-title {
+    font-size: 0.68em;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #222;
+  }
+
+  /* ── mode buttons ───────────────────────────────────── */
+  .mode-group {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .mode-btn {
+    flex: 1;
+    background: #1e1e1e;
+    border: 1px solid #333;
+    color: #666;
+    padding: 10px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85em;
+    line-height: 1.4;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .mode-btn:hover { border-color: #555; color: #999; }
+  .mode-btn.active {
+    border-color: #00FFB4;
+    color: #00FFB4;
+    background: #001a12;
+    box-shadow: 0 0 0 1px #00FFB430;
+  }
+  .mode-btn span { display: block; font-size: 0.8em; color: inherit; opacity: 0.7; margin-top: 2px; }
+
+  /* ── form controls ──────────────────────────────────── */
+  .field-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .field-row label {
+    font-size: 0.8em;
+    color: #777;
+    min-width: 40px;
+  }
+  input[type=text] {
+    background: #111;
+    border: 1px solid #333;
+    color: #ddd;
+    padding: 6px 10px;
+    border-radius: 5px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+    outline: none;
+    flex: 1;
+    transition: border-color 0.15s;
+  }
+  input[type=text]:focus { border-color: #00FFB4; }
+
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    font-size: 0.82em;
+    color: #666;
+    cursor: pointer;
+    user-select: none;
+  }
+  .checkbox-row input { accent-color: #00FFB4; cursor: pointer; }
+
+  /* ── pixel color picker ─────────────────────────────── */
+  .color-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .color-swatch {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: 2px solid #333;
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.1s;
+  }
+  .color-swatch:hover { transform: scale(1.15); }
+  .color-swatch.active { border-color: #fff; }
+
+  /* ── textarea input ─────────────────────────────────── */
+  #text-input {
+    background: #0a0a0a;
+    border: 1px solid #333;
+    color: #00FFB4;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    padding: 10px;
+    border-radius: 5px;
+    width: 100%;
+    resize: vertical;
+    outline: none;
+    letter-spacing: 0.05em;
+    transition: border-color 0.15s;
+    field-sizing: content;
+  }
+  #text-input:focus { border-color: #00FFB4; }
+
+  /* ── row indicators ─────────────────────────────────── */
+  #row-indicators {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-bottom: 6px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.7em;
+  }
+  .row-ind {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #444;
+  }
+  .row-ind .row-num { color: #333; min-width: 18px; text-align: right; }
+  .row-ind .row-bar { height: 3px; border-radius: 2px; background: #1a1a1a; flex: 1; overflow: hidden; }
+  .row-ind .row-fill { height: 100%; background: #00FFB4; transition: width 0.1s; }
+  .row-ind .row-fill.over { background: #FF4444; }
+  .row-ind .row-count { min-width: 28px; text-align: right; }
+  .row-ind .row-count.over { color: #FF6666; }
+
+  .char-stat {
+    font-size: 0.75em;
+    color: #444;
+    text-align: right;
+    margin-top: 6px;
+  }
+  .char-stat .used { color: #00FFB4; }
+
+  /* ── clear text btn ─────────────────────────────────── */
+  .text-btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  /* ── buttons ────────────────────────────────────────── */
+  .btn {
+    background: #00FFB4;
+    color: #000;
+    border: none;
+    padding: 9px 20px;
+    border-radius: 5px;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 0.88em;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .btn:hover { background: #00dda0; }
+  .btn:active { transform: scale(0.97); }
+  .btn.secondary {
+    background: #1e1e1e;
+    color: #888;
+    border: 1px solid #333;
+    font-weight: 400;
+  }
+  .btn.secondary:hover { background: #2a2a2a; color: #aaa; border-color: #444; }
+  .btn.danger {
+    background: #1e1e1e;
+    color: #FF6666;
+    border: 1px solid #552222;
+    font-weight: 400;
+  }
+  .btn.danger:hover { background: #2a1010; border-color: #884444; }
+
+  /* ── canvas ─────────────────────────────────────────── */
+  #canvas-wrap {
+    background: #000;
+    border: 2px solid #1a1a1a;
+    border-radius: 6px;
+    display: inline-block;
+    line-height: 0;
+    box-shadow: 0 0 24px #00FFB410;
+  }
+  canvas {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  .scale-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+    font-size: 0.75em;
+    color: #555;
+  }
+  .scale-btn {
+    background: #1e1e1e;
+    border: 1px solid #2a2a2a;
+    color: #666;
+    padding: 3px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: all 0.1s;
+  }
+  .scale-btn:hover { border-color: #444; color: #999; }
+  .scale-btn.active { border-color: #00FFB4; color: #00FFB4; background: #001a12; }
+
+  /* ── right column ───────────────────────────────────── */
+  .right-col { display: flex; flex-direction: column; gap: 16px; }
+
+  /* ── command output ─────────────────────────────────── */
+  #cmd-output {
+    background: #090909;
+    border: 1px solid #222;
+    color: #00FF99;
+    font-family: 'Courier New', monospace;
+    font-size: 0.82em;
+    padding: 12px;
+    border-radius: 5px;
+    word-break: break-all;
+    white-space: pre-wrap;
+    min-height: 44px;
+    line-height: 1.6;
+    margin-top: 12px;
+  }
+  #cmd-output.empty { color: #333; font-style: italic; }
+  .cmd-btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* ── info tag ───────────────────────────────────────── */
+  .tag {
+    display: inline-block;
+    background: #001a12;
+    border: 1px solid #00FFB430;
+    color: #00FFB4;
+    font-size: 0.7em;
+    padding: 2px 8px;
+    border-radius: 20px;
+    vertical-align: middle;
+    margin-left: 6px;
+  }
+
+  /* ── display info label ─────────────────────────────── */
+  #display-info {
+    font-size: 0.72em; color: #444; margin-bottom: 10px;
+  }
+
+  @media (max-width: 780px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<h1>OLED Graphic Generator <span class="tag">128 × 64 px</span></h1>
+
+<div class="layout">
+
+  <!-- ── LEFT: Controls ───────────────────────────────── -->
+  <div>
+
+    <!-- Settings panel -->
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-title">Mode</div>
+      <div class="mode-group">
+        <button class="mode-btn active" id="btn8x8" onclick="setMode('8x8')">
+          8 × 8
+          <span>16 cols · 8 rows · 128 chars</span>
+        </button>
+        <button class="mode-btn" id="btn16x16" onclick="setMode('16x16')">
+          16 × 16
+          <span>8 cols · 4 rows · 32 chars</span>
+        </button>
+      </div>
+
+      <div class="panel-title">Connection</div>
+      <div class="field-row">
+        <label>Port</label>
+        <input type="text" id="port-input" value="COM5" placeholder="COM5" style="max-width:100px">
+      </div>
+      <div class="field-row">
+        <label>Baud</label>
+        <input type="text" id="baud-input" value="115200" placeholder="115200">
+      </div>
+
+      <div class="panel-title" style="margin-top:14px">Display</div>
+      <div style="font-size:0.75em;color:#555;margin-bottom:8px;">Pixel color</div>
+      <div class="color-row">
+        <div class="color-swatch active" style="background:#00FFB4" title="Cyan-Green" onclick="setPixelColor('#00FFB4', this)"></div>
+        <div class="color-swatch" style="background:#FFFFFF" title="White" onclick="setPixelColor('#FFFFFF', this)"></div>
+        <div class="color-swatch" style="background:#FFA500" title="Amber" onclick="setPixelColor('#FFA500', this)"></div>
+        <div class="color-swatch" style="background:#00BFFF" title="Blue" onclick="setPixelColor('#00BFFF', this)"></div>
+        <div class="color-swatch" style="background:#FF4444" title="Red" onclick="setPixelColor('#FF4444', this)"></div>
+        <div class="color-swatch" style="background:#CCFF00" title="Lime" onclick="setPixelColor('#CCFF00', this)"></div>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="show-grid" onchange="renderDisplay()">
+        <label for="show-grid">Character cell grid overlay</label>
+      </div>
+    </div>
+
+    <!-- Text input panel -->
+    <div class="panel">
+      <div class="panel-title">Text Input <span id="mode-label-tag" class="tag" style="text-transform:none;letter-spacing:0">16 cols × 8 rows</span></div>
+      <div id="row-indicators"></div>
+      <textarea id="text-input" rows="8" spellcheck="false"
+        oninput="onTextInput()"
+        onkeydown="onTextKeyDown(event)"
+        placeholder="Type your content here...&#10;Each line = one display row."></textarea>
+      <div class="char-stat"><span class="used" id="char-count">0</span> / <span id="char-max">128</span> chars used</div>
+      <div class="text-btn-row">
+        <button class="btn secondary" onclick="fillTestPattern()">Fill test pattern</button>
+        <button class="btn secondary" onclick="clearText()">Clear</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── RIGHT: Preview + Command ─────────────────────── -->
+  <div class="right-col">
+
+    <!-- OLED Preview panel -->
+    <div class="panel" style="flex:1">
+      <div class="panel-title">OLED Preview</div>
+      <div class="scale-row">
+        Scale:
+        <button class="scale-btn" onclick="setScale(2)">2×</button>
+        <button class="scale-btn active" onclick="setScale(3)">3×</button>
+        <button class="scale-btn" onclick="setScale(4)">4×</button>
+        <button class="scale-btn" onclick="setScale(5)">5×</button>
+        <button class="scale-btn" onclick="setScale(6)">6×</button>
+      </div>
+      <div id="display-info">128 × 64 px — <span id="mode-desc">8×8 font, 16 columns, 8 rows</span></div>
+      <div id="canvas-wrap">
+        <canvas id="oled-canvas"></canvas>
+      </div>
+    </div>
+
+    <!-- Command generator panel -->
+    <div class="panel">
+      <div class="panel-title">Command Generator</div>
+      <div class="cmd-btn-row">
+        <button class="btn" onclick="generateCommand()">Generate Command</button>
+        <button class="btn secondary" id="copy-btn" onclick="copyCommand()">Copy</button>
+        <button class="btn danger" onclick="clearScreenCmd()">Clear Screen</button>
+      </div>
+      <div id="cmd-output" class="empty">Click "Generate Command" to produce the eeprom_render_tester command.</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// 8×8 Bitmap Font  —  ASCII 32 ('space') through 126 ('~')
+// Each entry: 8 bytes = 8 rows, MSB is the leftmost pixel
+// ════════════════════════════════════════════════════════════
+const FONT8 = [
+  [0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00], // 32  ' '
+  [0x18,0x18,0x18,0x18,0x18,0x00,0x18,0x00], // 33  '!'
+  [0x66,0x66,0x24,0x00,0x00,0x00,0x00,0x00], // 34  '"'
+  [0x36,0x36,0x7F,0x36,0x7F,0x36,0x36,0x00], // 35  '#'
+  [0x18,0x3E,0x60,0x3C,0x06,0x7C,0x18,0x00], // 36  '$'
+  [0x62,0x66,0x0C,0x18,0x30,0x66,0x46,0x00], // 37  '%'
+  [0x38,0x6C,0x68,0x76,0xDC,0xCC,0x76,0x00], // 38  '&'
+  [0x18,0x18,0x30,0x00,0x00,0x00,0x00,0x00], // 39  '\''
+  [0x0C,0x18,0x30,0x30,0x30,0x18,0x0C,0x00], // 40  '('
+  [0x30,0x18,0x0C,0x0C,0x0C,0x18,0x30,0x00], // 41  ')'
+  [0x00,0x66,0x3C,0xFF,0x3C,0x66,0x00,0x00], // 42  '*'
+  [0x00,0x18,0x18,0x7E,0x18,0x18,0x00,0x00], // 43  '+'
+  [0x00,0x00,0x00,0x00,0x00,0x18,0x18,0x30], // 44  ','
+  [0x00,0x00,0x00,0x7E,0x00,0x00,0x00,0x00], // 45  '-'
+  [0x00,0x00,0x00,0x00,0x00,0x18,0x18,0x00], // 46  '.'
+  [0x00,0x06,0x0C,0x18,0x30,0x60,0x00,0x00], // 47  '/'
+  [0x3C,0x66,0x6E,0x76,0x66,0x66,0x3C,0x00], // 48  '0'
+  [0x18,0x38,0x18,0x18,0x18,0x18,0x7E,0x00], // 49  '1'
+  [0x3C,0x66,0x06,0x0C,0x18,0x30,0x7E,0x00], // 50  '2'
+  [0x3C,0x66,0x06,0x1C,0x06,0x66,0x3C,0x00], // 51  '3'
+  [0x06,0x0E,0x1E,0x66,0x7F,0x06,0x06,0x00], // 52  '4'
+  [0x7E,0x60,0x7C,0x06,0x06,0x66,0x3C,0x00], // 53  '5'
+  [0x1C,0x30,0x60,0x7C,0x66,0x66,0x3C,0x00], // 54  '6'
+  [0x7E,0x66,0x0C,0x18,0x18,0x18,0x18,0x00], // 55  '7'
+  [0x3C,0x66,0x66,0x3C,0x66,0x66,0x3C,0x00], // 56  '8'
+  [0x3C,0x66,0x66,0x3E,0x06,0x0C,0x38,0x00], // 57  '9'
+  [0x00,0x18,0x18,0x00,0x00,0x18,0x18,0x00], // 58  ':'
+  [0x00,0x18,0x18,0x00,0x00,0x18,0x18,0x30], // 59  ';'
+  [0x0C,0x18,0x30,0x60,0x30,0x18,0x0C,0x00], // 60  '<'
+  [0x00,0x00,0x7E,0x00,0x7E,0x00,0x00,0x00], // 61  '='
+  [0x30,0x18,0x0C,0x06,0x0C,0x18,0x30,0x00], // 62  '>'
+  [0x3C,0x66,0x06,0x0C,0x18,0x00,0x18,0x00], // 63  '?'
+  [0x3E,0x63,0x6F,0x69,0x6F,0x60,0x3E,0x00], // 64  '@'
+  [0x18,0x3C,0x66,0x7E,0x66,0x66,0x66,0x00], // 65  'A'
+  [0x7C,0x66,0x66,0x7C,0x66,0x66,0x7C,0x00], // 66  'B'
+  [0x3C,0x66,0x60,0x60,0x60,0x66,0x3C,0x00], // 67  'C'
+  [0x78,0x6C,0x66,0x66,0x66,0x6C,0x78,0x00], // 68  'D'
+  [0x7E,0x60,0x60,0x7C,0x60,0x60,0x7E,0x00], // 69  'E'
+  [0x7E,0x60,0x60,0x7C,0x60,0x60,0x60,0x00], // 70  'F'
+  [0x3C,0x66,0x60,0x6E,0x66,0x66,0x3C,0x00], // 71  'G'
+  [0x66,0x66,0x66,0x7E,0x66,0x66,0x66,0x00], // 72  'H'
+  [0x3C,0x18,0x18,0x18,0x18,0x18,0x3C,0x00], // 73  'I'
+  [0x1E,0x0C,0x0C,0x0C,0x0C,0x6C,0x38,0x00], // 74  'J'
+  [0x66,0x6C,0x78,0x70,0x78,0x6C,0x66,0x00], // 75  'K'
+  [0x60,0x60,0x60,0x60,0x60,0x60,0x7E,0x00], // 76  'L'
+  [0x63,0x77,0x7F,0x6B,0x63,0x63,0x63,0x00], // 77  'M'
+  [0x66,0x76,0x7E,0x6E,0x66,0x66,0x66,0x00], // 78  'N'
+  [0x3C,0x66,0x66,0x66,0x66,0x66,0x3C,0x00], // 79  'O'
+  [0x7C,0x66,0x66,0x7C,0x60,0x60,0x60,0x00], // 80  'P'
+  [0x3C,0x66,0x66,0x66,0x66,0x3C,0x0E,0x00], // 81  'Q'
+  [0x7C,0x66,0x66,0x7C,0x78,0x6C,0x66,0x00], // 82  'R'
+  [0x3C,0x66,0x60,0x3C,0x06,0x66,0x3C,0x00], // 83  'S'
+  [0x7E,0x18,0x18,0x18,0x18,0x18,0x18,0x00], // 84  'T'
+  [0x66,0x66,0x66,0x66,0x66,0x66,0x3C,0x00], // 85  'U'
+  [0x66,0x66,0x66,0x66,0x66,0x3C,0x18,0x00], // 86  'V'
+  [0x63,0x63,0x63,0x6B,0x7F,0x77,0x63,0x00], // 87  'W'
+  [0x66,0x66,0x3C,0x18,0x3C,0x66,0x66,0x00], // 88  'X'
+  [0x66,0x66,0x66,0x3C,0x18,0x18,0x18,0x00], // 89  'Y'
+  [0x7E,0x06,0x0C,0x18,0x30,0x60,0x7E,0x00], // 90  'Z'
+  [0x3C,0x30,0x30,0x30,0x30,0x30,0x3C,0x00], // 91  '['
+  [0x00,0x60,0x30,0x18,0x0C,0x06,0x00,0x00], // 92  '\'
+  [0x3C,0x0C,0x0C,0x0C,0x0C,0x0C,0x3C,0x00], // 93  ']'
+  [0x18,0x3C,0x66,0x00,0x00,0x00,0x00,0x00], // 94  '^'
+  [0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xFF], // 95  '_'
+  [0x30,0x18,0x0C,0x00,0x00,0x00,0x00,0x00], // 96  '`'
+  [0x00,0x00,0x3C,0x06,0x3E,0x66,0x3E,0x00], // 97  'a'
+  [0x60,0x60,0x7C,0x66,0x66,0x66,0x7C,0x00], // 98  'b'
+  [0x00,0x00,0x3C,0x60,0x60,0x60,0x3C,0x00], // 99  'c'
+  [0x06,0x06,0x3E,0x66,0x66,0x66,0x3E,0x00], // 100 'd'
+  [0x00,0x00,0x3C,0x66,0x7E,0x60,0x3C,0x00], // 101 'e'
+  [0x1C,0x30,0x30,0x7C,0x30,0x30,0x30,0x00], // 102 'f'
+  [0x00,0x00,0x3E,0x66,0x66,0x3E,0x06,0x3C], // 103 'g'
+  [0x60,0x60,0x7C,0x66,0x66,0x66,0x66,0x00], // 104 'h'
+  [0x18,0x00,0x38,0x18,0x18,0x18,0x3C,0x00], // 105 'i'
+  [0x06,0x00,0x06,0x06,0x06,0x06,0x66,0x3C], // 106 'j'
+  [0x60,0x60,0x66,0x6C,0x78,0x6C,0x66,0x00], // 107 'k'
+  [0x38,0x18,0x18,0x18,0x18,0x18,0x3C,0x00], // 108 'l'
+  [0x00,0x00,0x7E,0x6B,0x6B,0x6B,0x63,0x00], // 109 'm'
+  [0x00,0x00,0x7C,0x66,0x66,0x66,0x66,0x00], // 110 'n'
+  [0x00,0x00,0x3C,0x66,0x66,0x66,0x3C,0x00], // 111 'o'
+  [0x00,0x00,0x7C,0x66,0x66,0x7C,0x60,0x60], // 112 'p'
+  [0x00,0x00,0x3E,0x66,0x66,0x3E,0x06,0x06], // 113 'q'
+  [0x00,0x00,0x7C,0x66,0x60,0x60,0x60,0x00], // 114 'r'
+  [0x00,0x00,0x3E,0x60,0x3C,0x06,0x7C,0x00], // 115 's'
+  [0x30,0x30,0x7C,0x30,0x30,0x30,0x1C,0x00], // 116 't'
+  [0x00,0x00,0x66,0x66,0x66,0x66,0x3E,0x00], // 117 'u'
+  [0x00,0x00,0x66,0x66,0x66,0x3C,0x18,0x00], // 118 'v'
+  [0x00,0x00,0x63,0x6B,0x7F,0x77,0x63,0x00], // 119 'w'
+  [0x00,0x00,0x66,0x3C,0x18,0x3C,0x66,0x00], // 120 'x'
+  [0x00,0x00,0x66,0x66,0x66,0x3E,0x06,0x3C], // 121 'y'
+  [0x00,0x00,0x7E,0x0C,0x18,0x30,0x7E,0x00], // 122 'z'
+  [0x0E,0x18,0x18,0x70,0x18,0x18,0x0E,0x00], // 123 '{'
+  [0x18,0x18,0x18,0x00,0x18,0x18,0x18,0x00], // 124 '|'
+  [0x70,0x18,0x18,0x0E,0x18,0x18,0x70,0x00], // 125 '}'
+  [0x76,0xDC,0x00,0x00,0x00,0x00,0x00,0x00], // 126 '~'
+];
+
+// Unknown character glyph (small box)
+const UNKNOWN_GLYPH = [0x00,0x3C,0x24,0x24,0x24,0x3C,0x00,0x00];
+
+// ════════════════════════════════════════════════════════════
+// State
+// ════════════════════════════════════════════════════════════
+let currentMode    = '8x8';
+let currentScale   = 3;
+let currentColor   = '#00FFB4';
+
+const MODES = {
+  '8x8':   { cols: 16, rows: 8, charPx: 8,  maxChars: 128,
+             label: '16 cols × 8 rows', desc: '8×8 font, 16 columns, 8 rows' },
+  '16x16': { cols: 8,  rows: 4, charPx: 16, maxChars: 32,
+             label: '8 cols × 4 rows',  desc: '16×16 font, 8 columns, 4 rows' },
+};
+
+// ════════════════════════════════════════════════════════════
+// Mode / scale / color
+// ════════════════════════════════════════════════════════════
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('btn8x8').classList.toggle('active', mode === '8x8');
+  document.getElementById('btn16x16').classList.toggle('active', mode === '16x16');
+  const cfg = MODES[mode];
+  document.getElementById('mode-label-tag').textContent = cfg.label;
+  document.getElementById('char-max').textContent = cfg.maxChars;
+  document.getElementById('mode-desc').textContent = cfg.desc;
+  document.getElementById('text-input').rows = cfg.rows;
+  updateRowIndicators();
+  onTextInput();
+}
+
+function setScale(s) {
+  currentScale = s;
+  document.querySelectorAll('.scale-btn').forEach((b, i) => {
+    b.classList.toggle('active', [2,3,4,5,6][i] === s);
+  });
+  resizeCanvas();
+  renderDisplay();
+}
+
+function setPixelColor(color, el) {
+  currentColor = color;
+  document.querySelectorAll('.color-swatch').forEach(e => e.classList.remove('active'));
+  el.classList.add('active');
+  renderDisplay();
+}
+
+// ════════════════════════════════════════════════════════════
+// Canvas sizing
+// ════════════════════════════════════════════════════════════
+function resizeCanvas() {
+  const canvas = document.getElementById('oled-canvas');
+  canvas.width  = 128 * currentScale;
+  canvas.height =  64 * currentScale;
+}
+
+// ════════════════════════════════════════════════════════════
+// Screen buffer — rows × cols of characters
+// ════════════════════════════════════════════════════════════
+function getScreenBuffer() {
+  const cfg  = MODES[currentMode];
+  const lines = document.getElementById('text-input').value.split('\n');
+  const buf   = [];
+  for (let r = 0; r < cfg.rows; r++) {
+    const line = lines[r] || '';
+    for (let c = 0; c < cfg.cols; c++) {
+      buf.push(c < line.length ? line[c] : ' ');
+    }
+  }
+  return buf;
+}
+
+// Flat string for the command (exact maxChars, padded with spaces)
+function getPayloadString() {
+  const cfg    = MODES[currentMode];
+  const buf    = getScreenBuffer();
+  return buf.join('').slice(0, cfg.maxChars).padEnd(cfg.maxChars, ' ');
+}
+
+// ════════════════════════════════════════════════════════════
+// Render
+// ════════════════════════════════════════════════════════════
+function getGlyph(ch) {
+  const code = ch.charCodeAt(0);
+  return (code >= 32 && code <= 126) ? FONT8[code - 32] : UNKNOWN_GLYPH;
+}
+
+function renderDisplay() {
+  const canvas = document.getElementById('oled-canvas');
+  const ctx    = canvas.getContext('2d');
+  const s      = currentScale;
+  const cfg    = MODES[currentMode];
+  const buf    = getScreenBuffer();
+  const px     = cfg.charPx;     // logical pixels per char dim (8 or 16)
+  const scale  = px / 8;         // 1 for 8x8, 2 for 16x16
+
+  // Background
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = currentColor;
+
+  for (let row = 0; row < cfg.rows; row++) {
+    for (let col = 0; col < cfg.cols; col++) {
+      const ch    = buf[row * cfg.cols + col] || ' ';
+      const glyph = getGlyph(ch);
+      const bx    = col * px * s;
+      const by    = row * px * s;
+
+      for (let gy = 0; gy < 8; gy++) {
+        const rowByte = glyph[gy] || 0;
+        for (let gx = 0; gx < 8; gx++) {
+          if ((rowByte >> (7 - gx)) & 1) {
+            ctx.fillRect(
+              bx + gx * scale * s,
+              by + gy * scale * s,
+              scale * s,
+              scale * s
+            );
+          }
+        }
+      }
+    }
+  }
+
+  // Grid overlay
+  if (document.getElementById('show-grid').checked) {
+    ctx.strokeStyle = '#1f1f1f';
+    ctx.lineWidth   = 1;
+    for (let c = 1; c < cfg.cols; c++) {
+      ctx.beginPath();
+      ctx.moveTo(c * px * s + 0.5, 0);
+      ctx.lineTo(c * px * s + 0.5, canvas.height);
+      ctx.stroke();
+    }
+    for (let r = 1; r < cfg.rows; r++) {
+      ctx.beginPath();
+      ctx.moveTo(0, r * px * s + 0.5);
+      ctx.lineTo(canvas.width, r * px * s + 0.5);
+      ctx.stroke();
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// Row indicator bars
+// ════════════════════════════════════════════════════════════
+function updateRowIndicators() {
+  const cfg   = MODES[currentMode];
+  const lines = document.getElementById('text-input').value.split('\n');
+  const cont  = document.getElementById('row-indicators');
+  cont.innerHTML = '';
+
+  for (let r = 0; r < cfg.rows; r++) {
+    const len  = (lines[r] || '').length;
+    const over = len > cfg.cols;
+    const pct  = Math.min((len / cfg.cols) * 100, 100);
+
+    const div = document.createElement('div');
+    div.className = 'row-ind';
+    div.innerHTML = `
+      <span class="row-num">${r + 1}</span>
+      <div class="row-bar"><div class="row-fill${over ? ' over' : ''}" style="width:${pct}%"></div></div>
+      <span class="row-count${over ? ' over' : ''}">${len}/${cfg.cols}</span>`;
+    cont.appendChild(div);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// Text input handler
+// ════════════════════════════════════════════════════════════
+function onTextInput() {
+  const cfg   = MODES[currentMode];
+  const lines = document.getElementById('text-input').value.split('\n');
+  let   count = 0;
+  for (let r = 0; r < Math.min(lines.length, cfg.rows); r++) {
+    count += Math.min(lines[r].length, cfg.cols);
+  }
+  document.getElementById('char-count').textContent = count;
+  updateRowIndicators();
+  renderDisplay();
+}
+
+// Prevent pasting/typing beyond row limit
+function onTextKeyDown(e) {
+  const cfg   = MODES[currentMode];
+  const ta    = document.getElementById('text-input');
+  const lines = ta.value.split('\n');
+  // Limit row count: block Enter if already at max rows
+  if (e.key === 'Enter' && lines.length >= cfg.rows) {
+    e.preventDefault();
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// Utility actions
+// ════════════════════════════════════════════════════════════
+function clearText() {
+  document.getElementById('text-input').value = '';
+  onTextInput();
+}
+
+function fillTestPattern() {
+  const cfg = MODES[currentMode];
+  // Safe alphanumeric chars only — avoid shell-special chars like " \ $ ` & | ^ % ' < >
+  const printable = [];
+  for (let c = 65; c <= 90;  c++) printable.push(String.fromCharCode(c)); // A-Z
+  for (let c = 97; c <= 122; c++) printable.push(String.fromCharCode(c)); // a-z
+  for (let c = 48; c <= 57;  c++) printable.push(String.fromCharCode(c)); // 0-9
+  const rows = [];
+  let   idx  = 0;
+  for (let r = 0; r < cfg.rows; r++) {
+    let row = '';
+    for (let c = 0; c < cfg.cols; c++) {
+      row += printable[idx % printable.length];
+      idx++;
+    }
+    rows.push(row);
+  }
+  document.getElementById('text-input').value = rows.join('\n');
+  onTextInput();
+}
+
+// ════════════════════════════════════════════════════════════
+// Command generation
+// ════════════════════════════════════════════════════════════
+function generateCommand() {
+  const port    = (document.getElementById('port-input').value  || 'COM5').trim();
+  const baud    = (document.getElementById('baud-input').value  || '115200').trim();
+  const payload = getPayloadString();
+
+  // Escape backslash and double-quote for safe shell embedding
+  const escaped = payload.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+  const cmd = `eeprom_render_tester.exe -i "${escaped}" -port ${port} -baud ${baud}`;
+  const el  = document.getElementById('cmd-output');
+  el.textContent = cmd;
+  el.classList.remove('empty');
+}
+
+function clearScreenCmd() {
+  const port = (document.getElementById('port-input').value  || 'COM5').trim();
+  const baud = (document.getElementById('baud-input').value  || '115200').trim();
+  const cmd  = `eeprom_render_tester.exe -m clear -port ${port} -baud ${baud}`;
+  const el   = document.getElementById('cmd-output');
+  el.textContent = cmd;
+  el.classList.remove('empty');
+}
+
+function copyCommand() {
+  const el = document.getElementById('cmd-output');
+  if (el.classList.contains('empty')) return;
+  navigator.clipboard.writeText(el.textContent).then(() => {
+    const btn = document.getElementById('copy-btn');
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// Init
+// ════════════════════════════════════════════════════════════
+resizeCanvas();
+updateRowIndicators();
+renderDisplay();
+</script>
+</body>
+</html>

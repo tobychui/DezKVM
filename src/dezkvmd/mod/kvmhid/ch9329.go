@@ -15,6 +15,7 @@ func (c *Controller) ConfigureChipTo115200() error {
 	}
 
 	// Modify baudrate bytes in the response
+	currentConfig[0] = 0x02 // Set mode to 2 (Standard mouse & keyboard mode) as required for 115200 baudrate
 	currentConfig[3] = 0x00 // Baudrate byte 1
 	currentConfig[4] = 0x01 // Baudrate byte 2
 	currentConfig[5] = 0xC2 // Baudrate byte 3
@@ -48,6 +49,44 @@ func (c *Controller) ConfigureChipTo115200() error {
 	return nil
 }
 
+func (c *Controller) ConfigureChipToMode2() error {
+	// Send the command to get chip configuration and info
+	currentConfig, err := c.GetChipCurrentConfiguration()
+	if err != nil {
+		fmt.Printf("Error getting current configuration: %v\n", err)
+		return errors.New("failed to get current configuration")
+	}
+
+	// Modify mode setting in the response
+	currentConfig[0] = 0x02
+
+	time.Sleep(1 * time.Second) // Wait for a second before sending the command
+	// Prepare the command to set the new configuration
+	setCmd := append([]byte{0x57, 0xAB, 0x00, 0x09, 0x32}, currentConfig[:50]...)
+	setCmd = append(setCmd, calcChecksum(setCmd[:len(setCmd)-1]))
+	err = c.Send(setCmd)
+	if err != nil {
+		fmt.Printf("Error sending configuration command: %v\n", err)
+		return errors.New("failed to send configuration command")
+	}
+
+	// Wait for the reply
+	resp, err := c.WaitForReply(0x09)
+	if err != nil {
+		fmt.Printf("Error waiting for reply: %v\n", err)
+		return errors.New("failed to get reply")
+	}
+
+	fmt.Println()
+	fmt.Print("Reply: ")
+	for _, b := range resp {
+		fmt.Printf("0x%02X ", b)
+	}
+	fmt.Println()
+	fmt.Println("Chip mode updated to 2 successfully")
+	return nil
+}
+
 func (c *Controller) WriteChipProperties() ([]byte, error) {
 	manufacturerString := []byte{
 		0x57, 0xAB, 0x00, 0x0B,
@@ -71,7 +110,7 @@ func (c *Controller) WriteChipProperties() ([]byte, error) {
 
 	productString := []byte{
 		0x57, 0xAB, 0x00, 0x0B,
-		0x0B, // Length of the payload
+		0x08, // Length of the payload
 		0x01, // Set product string
 		0x06, // Length of the USB product string
 		'D', 'e', 'z', 'K', 'V', 'M',
@@ -132,11 +171,11 @@ func (c *Controller) GetChipCurrentConfiguration() ([]byte, error) {
 func (c *Controller) ChipSoftReset() error {
 	//Send the command to get chip configuration and info
 	cmd := []byte{0x57, 0xAB,
-		0x00, 0x0F,
+		0x00, 0x0F, 0x00,
 		0x00, //placeholder for checksum
 	}
 
-	cmd[4] = calcChecksum(cmd[:4])
+	cmd[5] = calcChecksum(cmd[:5])
 	err := c.Send(cmd)
 	if err != nil {
 		fmt.Printf("Error sending command: %v\n", err)

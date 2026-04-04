@@ -1,0 +1,1 @@
+eeprom_render_tester.exe -i "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCD" -port COM5 -baud 115200

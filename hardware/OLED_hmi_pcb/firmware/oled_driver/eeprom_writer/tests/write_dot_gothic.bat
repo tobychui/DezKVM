@@ -1,0 +1,1 @@
+.\eeprom_write.exe -font="DotGothic16-Regular.ttf" -fontwidth=16 -fontheight=16 -fontsize=14 -offsetx=4 -offsety=2

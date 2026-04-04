@@ -21,12 +21,14 @@ func register_ipkvm_apis(mux *http.ServeMux) {
 	authManager.HandleFunc("/api/v1/stream/{uuid}/video", handleVideoStream, mux)
 	authManager.HandleFunc("/api/v1/stream/{uuid}/audio", handleAudioStream, mux)
 	authManager.HandleFunc("/api/v1/hid/{uuid}/events", handleHIDEvents, mux)
-	authManager.HandleFunc("/api/v1/mass_storage/switch", handleMassStorageSwitch, mux)
 	authManager.HandleFunc("/api/v1/instances", handleListInstances, mux)
 	authManager.HandleFunc("/api/v1/resolutions/{uuid}", handleGetSupportedResolutions, mux)
 	authManager.HandleFunc("/api/v1/resolution/{uuid}", handleGetCurrentResolution, mux)
-	authManager.HandleFunc("/api/v1/resolution/change", handleChangeResolution, mux)
 	authManager.HandleFunc("/api/v1/screenshot/{uuid}", handleScreenshot, mux)
+	// Runtime APIs
+	authManager.HandleFunc("/api/v1/mass_storage/switch", handleMassStorageSwitch, mux)
+	authManager.HandleFunc("/api/v1/resolution/change", handleChangeResolution, mux)
+
 }
 
 // register_terminal_apis registers terminal-related API endpoints

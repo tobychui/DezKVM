@@ -1,3 +1,13 @@
+/*
+    Viewport.css
+
+    This css file contains the styles for the viewport, 
+    including the video stream, menus, and interactive elements. 
+    
+    It is designed to create a clean and user-friendly 
+    interface for remote desktop like interaction.
+
+*/
 #menu {
     height: auto; /* allow dynamic height */
     overflow: visible;
@@ -80,6 +90,11 @@
     object-fit: contain;
     cursor: url('img/cursor_overlay.png') 0 0, pointer;
     user-select: none;
+}
+
+/* Hide cursor overlay when local cursor is disabled */
+#remoteCapture.hide-cursor {
+    cursor: none;
 }
 
 /* Scale to Fit mode - scales image to fill viewport while maintaining aspect ratio */

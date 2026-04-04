@@ -66,7 +66,7 @@ Because of this design philosophy:
 
 The Dezkvmd is a golang written piece of code that runs on a x86 or ARM computer with Debian based Linux installed. Require v4l2 and alsa with kernel 6.1 or above.  
 
-To build the Remdeskd, you will need go compiler. The go package manager will take care of the dependencies during your first build. 
+To build the dezkvmd, you will need go compiler. The go package manager will take care of the dependencies during your first build. 
 
 ```bash
 cd dezkvmd/
@@ -135,9 +135,6 @@ sudo apt install alsa-utils
 #### Build your own hardware
 
 See `hardware/README.md`
-
-#### Onboard ATX Controller Firmware Flashing
-See `firmware/README.md`
 
 ## Usage
 
