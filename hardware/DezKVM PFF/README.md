@@ -27,10 +27,6 @@ Here are just examples. **You can always connects more Port modules, just make s
 
 
 
-
-
-![usb-kvm](../img/README/usb-kvm.jpg)
-
 ## DezKVM Port Module – Technical Specifications
 
 The key feature of the DezKVM Port module is the modularity and ease of building. It use all hardware components and no emulated USB composite device, allowing highest compatibility with existing computer / OSes. 
