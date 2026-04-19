@@ -1,17 +1,30 @@
 package dezkvm
 
 import (
+	"encoding/json"
 	"errors"
+	"log"
+	"os"
+	"path/filepath"
 
 	"imuslab.com/dezkvm/dezkvmd/mod/usbcapture"
 )
 
 // NewKvmHostInstance creates a new instance of DezkVM, which can manage multiple USB KVM devices.
 func NewKvmHostInstance(option *RuntimeOptions) *DezkVM {
+	confFolder := option.ConfigFolderPath
+	if confFolder == "" {
+		confFolder = "./config/instances"
+	}
+	// Create the config folder if it doesn't exist
+	if err := os.MkdirAll(confFolder, 0750); err != nil {
+		log.Printf("Warning: failed to create config folder %s: %v\n", confFolder, err)
+	}
 	return &DezkVM{
-		UsbKvmInstance: []*UsbKvmDeviceInstance{},
-		occupiedUUIDs:  make(map[string]bool),
-		option:         option,
+		UsbKvmInstance:   []*UsbKvmDeviceInstance{},
+		ConfigFolderPath: confFolder,
+		occupiedUUIDs:    make(map[string]bool),
+		option:           option,
 	}
 }
 
@@ -137,4 +150,39 @@ func (d *DezkVM) GetInstanceByUUID(uuid string) (*UsbKvmDeviceInstance, error) {
 
 func (d *DezkVM) Close() error {
 	return d.StopAllUsbKvmDevices()
+}
+
+// preferencesFilePath returns the path to the preferences JSON file for a given UUID.
+func (d *DezkVM) preferencesFilePath(uuid string) string {
+	return filepath.Join(d.ConfigFolderPath, uuid+".json")
+}
+
+// SavePreferences writes the instance preferences to disk as pretty-printed JSON.
+func (d *DezkVM) SavePreferences(instance *UsbKvmDeviceInstance) error {
+	if instance.Preferences == nil {
+		return nil
+	}
+	data, err := json.MarshalIndent(instance.Preferences, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(d.preferencesFilePath(instance.UUID()), data, 0644)
+}
+
+// LoadPreferences reads preferences from disk for a given UUID.
+// Returns nil (no error) if the file does not exist.
+func (d *DezkVM) LoadPreferences(uuid string) (*UsbKvmPreferences, error) {
+	path := d.preferencesFilePath(uuid)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var prefs UsbKvmPreferences
+	if err := json.Unmarshal(data, &prefs); err != nil {
+		return nil, err
+	}
+	return &prefs, nil
 }

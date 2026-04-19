@@ -77,6 +77,7 @@ function showPasteBox() {
     const textarea = document.getElementById('pasteTextarea');
     pasteBox.style.display = 'flex';
     pasteBoxActive = true;
+    pausePasteCapture = true;
     textarea.focus();
     updatePasteBoxCharCounter();
     
@@ -89,6 +90,7 @@ function closePasteBox() {
     const pasteBox = document.getElementById('pasteBox');
     pasteBox.style.display = 'none';
     pasteBoxActive = false;
+    pausePasteCapture = false;
     
     // Re-attach document key events
     document.addEventListener('keydown', handleKeyDown);
@@ -109,7 +111,7 @@ function sendKeyPress(keycode, needsShift = false) {
     // Press shift if needed
     if (needsShift) {
         hidsocket.send(JSON.stringify({
-            event: 0,
+            event: HIDEvent.KEY_DOWN,
             keycode: 16, // Shift key
             is_right_modifier_key: false
         }));
@@ -117,14 +119,14 @@ function sendKeyPress(keycode, needsShift = false) {
 
     // Press the key
     hidsocket.send(JSON.stringify({
-        event: 0,
+        event: HIDEvent.KEY_DOWN,
         keycode: keycode,
         is_right_modifier_key: false
     }));
 
     // Release the key
     hidsocket.send(JSON.stringify({
-        event: 1,
+        event: HIDEvent.KEY_UP,
         keycode: keycode,
         is_right_modifier_key: false
     }));
@@ -132,7 +134,7 @@ function sendKeyPress(keycode, needsShift = false) {
     // Release shift if needed
     if (needsShift) {
         hidsocket.send(JSON.stringify({
-            event: 1,
+            event: HIDEvent.KEY_UP,
             keycode: 16, // Shift key
             is_right_modifier_key: false
         }));
@@ -157,7 +159,6 @@ async function sendPasteText() {
     if (!text) {
         $.toast({
             message: '<i class="yellow exclamation triangle icon"></i> No text to send',
-            //class: 'warning'
         });
         return;
     }
@@ -165,18 +166,8 @@ async function sendPasteText() {
     if (!hidsocket || hidsocket.readyState !== WebSocket.OPEN) {
         $.toast({
             message: '<i class="red circle times icon"></i> HID WebSocket not connected',
-            //class: 'error'
         });
         return;
-    }
-
-    // Estimate the total time required
-    const estimatedTimeMs = text.length * 30; // 30ms per character
-    if (estimatedTimeMs > 10000) { // More than 10 seconds
-        const proceed = confirm(`Sending this text may take approximately ${(estimatedTimeMs / 1000).toFixed(1)} seconds. Do you want to proceed?`);
-        if (!proceed) {
-            return;
-        }
     }
 
     // Reset cancel flag
@@ -195,7 +186,10 @@ async function sendPasteText() {
     let sentCount = 0;
     let skippedCount = 0;
 
-    // Process each character with delay
+    // Check if ACK-based sending is available
+    const useAck = (typeof sendKeyPressWithAck === 'function');
+
+    // Process each character, waiting for MCU ACK before proceeding
     for (let i = 0; i < text.length; i++) {
         // Check if cancelled
         if (pasteCancelled) {
@@ -204,30 +198,50 @@ async function sendPasteText() {
         }
 
         const char = text[i];
+        let sent = false;
         
         // Check if uppercase letter
         if (char >= 'A' && char <= 'Z') {
             const keycode = char.charCodeAt(0);
-            sendKeyPress(keycode, true);
-            sentCount++;
+            if (useAck) {
+                await sendKeyPressWithAck(keycode, true);
+            } else {
+                sendKeyPress(keycode, true);
+            }
+            sent = true;
         }
         // Check if lowercase letter
         else if (char >= 'a' && char <= 'z') {
             const keycode = char.toUpperCase().charCodeAt(0);
-            sendKeyPress(keycode, false);
-            sentCount++;
+            if (useAck) {
+                await sendKeyPressWithAck(keycode, false);
+            } else {
+                sendKeyPress(keycode, false);
+            }
+            sent = true;
         }
         // Check if number or mapped character
         else if (charToKeyCode[char] !== undefined) {
             const mapping = charToKeyCode[char];
             if (typeof mapping === 'object') {
-                sendKeyPress(mapping.keycode, mapping.shift);
+                if (useAck) {
+                    await sendKeyPressWithAck(mapping.keycode, mapping.shift);
+                } else {
+                    sendKeyPress(mapping.keycode, mapping.shift);
+                }
             } else {
-                sendKeyPress(mapping, false);
+                if (useAck) {
+                    await sendKeyPressWithAck(mapping, false);
+                } else {
+                    sendKeyPress(mapping, false);
+                }
             }
-            sentCount++;
+            sent = true;
         }
-        else {
+
+        if (sent) {
+            sentCount++;
+        } else {
             skippedCount++;
             console.warn(`Unsupported character: '${char}' (code: ${char.charCodeAt(0)})`);
         }
@@ -236,8 +250,10 @@ async function sendPasteText() {
         const progress = ((i + 1) / text.length) * 100;
         $('#pasteProgressBar').progress('set percent', progress);
 
-        // Add delay between keystrokes (30ms delay)
-        await new Promise(resolve => setTimeout(resolve, 30));
+        // Fallback delay only when ACK is not available
+        if (!useAck) {
+            await new Promise(resolve => setTimeout(resolve, 30));
+        }
     }
 
     // Show completion message only if not cancelled
@@ -249,7 +265,6 @@ async function sendPasteText() {
 
         $.toast({
             message: message,
-            //class: 'success'
         });
     }
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -74,7 +75,8 @@ func init_ipkvm_mode() error {
 
 	//Create a new DezkVM manager
 	dezkvmManager = dezkvm.NewKvmHostInstance(&dezkvm.RuntimeOptions{
-		EnableLog: true,
+		EnableLog:        true,
+		ConfigFolderPath: "./config/instances",
 	})
 
 	// Experimental
@@ -128,7 +130,15 @@ func init_ipkvm_mode() error {
 	// Register Terminal related APIs
 	register_terminal_apis(listeningServerMux)
 
-	err = http.ListenAndServe(":9000", listeningServerMux)
+	fmt.Println("Listening on https://localhost:9000")
+
+	// Ensure TLS certificate exists (generate self-signed if missing)
+	certPath, keyPath, err := ensureTLSCert(CONFIG_PATH)
+	if err != nil {
+		log.Fatal("Failed to ensure TLS certificate:", err)
+	}
+
+	err = http.ListenAndServeTLS(":9000", certPath, keyPath, listeningServerMux)
 	return err
 }
 

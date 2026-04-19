@@ -52,6 +52,7 @@ function showScreenshotSelector() {
     }
 
     ocrState.isActive = true;
+    pausePasteCapture = true;
 
     // Create overlay
     const overlay = document.createElement('div');
@@ -362,6 +363,7 @@ function showOCRLoading() {
 function cancelOCRSelection() {
     ocrState.isActive = false;
     ocrState.isDragging = false;
+    pausePasteCapture = false;
 
     // Remove elements
     const overlay = document.getElementById('ocr-overlay');

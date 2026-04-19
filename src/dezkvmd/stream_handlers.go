@@ -126,3 +126,32 @@ func handleScreenshot(w http.ResponseWriter, r *http.Request) {
 	instanceUUID := r.PathValue("uuid")
 	dezkvmManager.HandleScreenshot(w, r, instanceUUID)
 }
+
+// handleMouseJiggler toggles mouse jiggler for an instance
+func handleMouseJiggler(w http.ResponseWriter, r *http.Request) {
+	instanceUUID := r.PathValue("uuid")
+	dezkvmManager.HandleMouseJiggler(w, r, instanceUUID)
+}
+
+// handleReconnectCapture closes and restarts the V4L2 + audio capture device
+func handleReconnectCapture(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	instanceUUID := r.PathValue("uuid")
+	dezkvmManager.HandleReconnectCapture(w, r, instanceUUID)
+}
+
+// handlePreferences handles GET/POST for instance preferences
+func handlePreferences(w http.ResponseWriter, r *http.Request) {
+	instanceUUID := r.PathValue("uuid")
+	switch r.Method {
+	case http.MethodGet:
+		dezkvmManager.HandleGetPreferences(w, r, instanceUUID)
+	case http.MethodPost:
+		dezkvmManager.HandleSetPreferences(w, r, instanceUUID)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}

@@ -532,6 +532,13 @@ body.dark-theme .keyboard-row-function {
     box-shadow: 0 0 8px rgba(231, 76, 60, 0.6);
 }
 
+#keystackDisplay{
+    position: absolute;
+    top: 0.4em;
+    left: 0.4em;
+    padding: 1.2em;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .onscreen-keyboard {

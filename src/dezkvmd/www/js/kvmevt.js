@@ -9,6 +9,17 @@ const enableKvmEventDebugPrintout = false; //Set to true to enable debug printou
 const cursorCaptureElementId = "remoteCapture";
 const streamingContainerId = "remoteCapture";
 
+// HID event type constants (must match backend EventType values in mod/kvmhid/typedef.go)
+const HIDEvent = Object.freeze({
+    KEY_DOWN:         0,
+    KEY_UP:           1,
+    MOUSE_MOVE:       2,
+    MOUSE_BTN_DOWN:   3,
+    MOUSE_BTN_UP:     4,
+    MOUSE_SCROLL:     5,
+    RESET:            0xFF,
+});
+
 let hidsocket;
 let hidWebSocketReady = false;
 let protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -17,9 +28,22 @@ let hidSocketURL = `${protocol}://${window.location.hostname}:${port}/api/v1/hid
 let audioSocketURL = `${protocol}://${window.location.hostname}:${port}/api/v1/stream/{uuid}/audio`;
 
 let mouseMoveAbsolute = true; // Set to true for absolute mouse coordinates, false for relative
+let relativeMouseSensitivity = 5; // Sensitivity multiplier for relative mouse mode (1-10)
 let mouseIsOutside = false; //Mouse is outside capture element
 let audioFrontendStarted = false; //Audio frontend has been started
 let kvmDeviceUUID = ""; //UUID of the device being controlled
+let swapCtrlCmd = false; // Swap CTRL and CMD (Meta) keys
+let askOnPaste = true; // Prompt user when pasting
+let pausePasteCapture = false; // Used to temporarily disable paste event handling when modals are open
+let keyStackingEnabled = false; // Whether key stacking mode feature is enabled
+let stackToggleKey = 'ShiftRight'; // event.code of the key that activates/deactivates key stacking (default: Right Shift)
+let keyStackingActive = false;  // Whether key stacking is currently active (keys are being stacked)
+let keyStack = [];              // Array of { keycode, isRightModKey } to be sent as a combo
+let _suppressKeyUpCodes = new Set(); // event.code values whose keyUp should be swallowed (keys captured during stacking)
+
+// ACK tracking for reliable HID sends (used by paste)
+let _hidAckCounter = 0;
+let _hidPendingAcks = {}; // { rid: { resolve, timer } }
 
 
 if (window.location.hash.length > 1){
@@ -36,6 +60,37 @@ if (window.location.hash.length > 1){
         classProgress: 'blue'
     });
     setStreamingSource(kvmDeviceUUID);
+
+    // Load preferences from backend to apply on page load
+    $.get('/api/v1/preferences/' + kvmDeviceUUID, function(prefs){
+        if(prefs){
+            if(typeof prefs.enable_relative_mouse_mode !== 'undefined'){
+                mouseMoveAbsolute = !prefs.enable_relative_mouse_mode;
+            }
+            if(typeof prefs.relative_mouse_sensitivity !== 'undefined' && prefs.relative_mouse_sensitivity > 0){
+                relativeMouseSensitivity = prefs.relative_mouse_sensitivity;
+            }
+            if(typeof prefs.swap_ctrl_cmd !== 'undefined'){
+                swapCtrlCmd = prefs.swap_ctrl_cmd;
+            }
+            if(typeof prefs.ask_on_paste !== 'undefined'){
+                askOnPaste = prefs.ask_on_paste;
+            }
+            if(typeof prefs.key_stacking_enabled !== 'undefined'){
+                keyStackingEnabled = prefs.key_stacking_enabled;
+            }
+            if(prefs.stack_toggle_key){
+                stackToggleKey = prefs.stack_toggle_key;
+            }
+            // If relative mouse mode is saved, prompt user to click viewport to acquire pointer lock
+            if(!mouseMoveAbsolute){
+                $.toast({
+                    message: '<i class="mouse pointer icon"></i> Click the viewport to restart cursor.',
+                    duration: 5000
+                });
+            }
+        }
+    });
 }
 
 
@@ -55,10 +110,41 @@ function getCurrentStreamingResolution(){
 }
 
 
+/* Get current mouse button state bitmask from event.buttons */
+function getMouseButtonState(event) {
+    let state = 0;
+    if (event.buttons & 1) state |= 0x01; // left
+    if (event.buttons & 4) state |= 0x02; // middle
+    if (event.buttons & 2) state |= 0x04; // right
+    return state;
+}
+
 /* Mouse events */
 function handleMouseMove(event) {
+    // In relative mode, only send data when pointer lock is active
+    if (!mouseMoveAbsolute && !document.pointerLockElement) return;
+    if (!mouseMoveAbsolute) {
+        // Relative mouse mode: use movementX/Y deltas
+        let dx = Math.round(event.movementX * (relativeMouseSensitivity / 5));
+        let dy = Math.round(event.movementY * (relativeMouseSensitivity / 5));
+        // Clamp to int8 range (-127 to 127)
+        dx = Math.max(-127, Math.min(127, dx));
+        dy = Math.max(-127, Math.min(127, dy));
+        if (dx === 0 && dy === 0) return;
+        const hidCommand = {
+            event: HIDEvent.MOUSE_MOVE,
+            mouse_rel_x: dx,
+            mouse_rel_y: dy,
+            mouse_move_button_state: getMouseButtonState(event),
+        };
+        if (hidsocket && hidsocket.readyState === WebSocket.OPEN) {
+            hidsocket.send(JSON.stringify(hidCommand));
+        }
+        return;
+    }
+
     const hidCommand = {
-        event: 2,
+        event: HIDEvent.MOUSE_MOVE,
         mouse_x: event.clientX,
         mouse_y: event.clientY,
     };
@@ -66,7 +152,7 @@ function handleMouseMove(event) {
     let rect = event.target.getBoundingClientRect();
     let offsetX = 0;
     let offsetY = 0;
-    if (isScaleToFit){
+    if (!!isScaleToFit && isScaleToFit){
         //Calculate relative coordinates in scale to fit mode
         let boundingEdge = getScaleToFitBoundEdge();
         let streamingResolution = getCurrentStreamingResolution();
@@ -114,6 +200,7 @@ function handleMouseMove(event) {
 function handleMousePress(event) {
     event.preventDefault();
     event.stopImmediatePropagation();
+    if (!mouseMoveAbsolute && !document.pointerLockElement) return;
     if (mouseIsOutside) {
         console.warn("Mouse is outside the capture area, ignoring mouse press.");
         return;
@@ -126,7 +213,7 @@ function handleMousePress(event) {
     }; //Map javascript mouse buttons to HID buttons
 
     const hidCommand = {
-        event: 3,
+        event: HIDEvent.MOUSE_BTN_DOWN,
         mouse_button: buttonMap[event.button] || 0
     };
 
@@ -141,7 +228,7 @@ function handleMousePress(event) {
         console.error("WebSocket is not open.");
     }
 
-    if (!audioFrontendStarted && currentAudioQuality !== 'disabled'){
+    if (!audioFrontendStarted && !!currentAudioQuality && currentAudioQuality !== 'disabled'){
         startAudioWebSocket(currentAudioQuality);
         audioFrontendStarted = true;
     }
@@ -150,8 +237,9 @@ function handleMousePress(event) {
 function handleMouseRelease(event) {
     event.preventDefault();
     event.stopImmediatePropagation();
+    if (!mouseMoveAbsolute && !document.pointerLockElement) return;
     if (mouseIsOutside) {
-        console.warn("Mouse is outside the capture area, ignoring mouse press.");
+        console.warn("Mouse is outside the capture area, ignoring mouse release.");
         return;
     }
     /* Mouse buttons: 1=left, 2=right, 3=middle */
@@ -162,7 +250,7 @@ function handleMouseRelease(event) {
     }; //Map javascript mouse buttons to HID buttons
     
     const hidCommand = {
-        event: 4,
+        event: HIDEvent.MOUSE_BTN_UP,
         mouse_button: buttonMap[event.button] || 0
     };
 
@@ -178,12 +266,13 @@ function handleMouseRelease(event) {
 }
 
 function handleMouseScroll(event) {
+    if (!mouseMoveAbsolute && !document.pointerLockElement) return;
     const hidCommand = {
-        event: 5,
+        event: HIDEvent.MOUSE_SCROLL,
         mouse_scroll: event.deltaY
     };
     if (mouseIsOutside) {
-        console.warn("Mouse is outside the capture area, ignoring mouse press.");
+        console.warn("Mouse is outside the capture area, ignoring mouse scroll.");
         return;
     }
 
@@ -205,22 +294,125 @@ function isNumpadEvent(event) {
     return event.location === 3;
 }
 
+// Swap CTRL (keyCode 17) and Meta/CMD (keyCode 91/93) keycodes when swap is enabled
+function applyCtrlCmdSwap(keyCode) {
+    if (!swapCtrlCmd) return keyCode;
+    // Left/Right Ctrl = 17, Left Meta = 91, Right Meta = 93
+    if (keyCode === 17) return 91;  // Ctrl -> Meta
+    if (keyCode === 91 || keyCode === 93) return 17; // Meta -> Ctrl
+    return keyCode;
+}
+
+// Swap the key name for modifier detection when swap is enabled
+function applyCtrlCmdSwapKey(key) {
+    if (!swapCtrlCmd) return key;
+    if (key === 'Control') return 'Meta';
+    if (key === 'Meta') return 'Control';
+    return key;
+}
+
+// handleStackToggleKeyDown manages entering/exiting key stacking mode when the toggle key is pressed
+function handleStackToggleKeyDown(event){
+    if (!keyStackingActive) {
+        // Enter stacking mode
+        keyStack = [];
+        _suppressKeyUpCodes.clear();
+        $("#keystackDisplay").show();
+         document.getElementById('keystackContent').innerHTML = "";
+        keyStackingActive = true;
+        console.log('[KeyStack] Stacking mode ON');
+        if (typeof $ !== 'undefined' && $.toast) {
+            $.toast({ message: `<i class="ui green circle check icon"></i> Key stacking ON`, duration: 2500 });
+        }
+    } else {
+        // Exit stacking mode and fire the combo
+        keyStackingActive = false;
+        $("#keystackDisplay").hide();
+        console.log('[KeyStack] Stacking mode OFF, sending combo:', keyStack.map(k => `${k.key}(${k.keycode})`));
+        if (typeof $ !== 'undefined' && $.toast) {
+            var label = keyStack.map(k => k.key).join(' + ') || '(empty)';
+            $.toast({ message: `Sending: ${label}`, duration: 2500 });
+        }
+        if (keyStack.length > 0) {
+            sendKeyStackWithAck(keyStack.slice());
+            keyStack = [];
+        }
+    }
+}
+
+function clearKeyStack(){
+    keyStackingActive = false;
+    $("#keystackDisplay").hide();
+    keyStack = [];
+    _suppressKeyUpCodes.clear();
+    console.log('[KeyStack] Stacking mode OFF, combo cleared');
+}
+
+// In stacking mode, capture keys into the stack instead of sending immediately. 
+// Also track which keys to suppress keyUp for.
+function handleStackModeKeyDown(event){
+    let stackKeyCode = applyCtrlCmdSwap(event.keyCode);
+    let stackKey = applyCtrlCmdSwapKey(event.key);
+    const rightModKeys = ['Control', 'Alt', 'Shift', 'Meta'];
+    const isRight = (rightModKeys.includes(stackKey) && event.location === 2) ||
+                    (event.key === 'Enter' && isNumpadEvent(event));
+    if (keyStack.length >=6){
+        // Reached the max number of USB HID keys that can be sent in a combo, ignore additional keys
+        $.toast({ message: '<i class="red circle times icon"></i> Max 6 keys in combo, ignoring: ' + event.key, duration: 3000 });
+        return;
+    }
+    // Ignore repeated keydown events (key held)
+    if (!keyStack.some(k => k.code === event.code)) {
+        keyStack.push({ key: event.key, keycode: stackKeyCode, isRightModKey: isRight, code: event.code });
+        _suppressKeyUpCodes.add(event.code);
+        console.log(`[KeyStack] + ${event.key} (keyCode=${stackKeyCode})  stack: [${keyStack.map(k => k.key).join(', ')}]`);
+
+        // Render the keystack to the display
+        let html = keyStack.map(k => `<div class="ui basic green label">${k.code}</div>`).join('');
+        document.getElementById('keystackContent').innerHTML = html;
+    }
+    return;
+}
+
+// handleKeyDown is the main keyboard event handler. 
+// It manages normal key sending as well as key stacking and paste prompt interception.
 function handleKeyDown(event) {
+    // Intercept paste (Ctrl+V / Cmd+V) when askOnPaste is enabled
+    if (askOnPaste && (event.key === 'v' || event.key === 'V') && (event.ctrlKey || event.metaKey)) {
+        // Not handled here, will be handled by paste event listener to show prompt
+        return;
+    }
+
     event.preventDefault();
     event.stopImmediatePropagation();
+
+    // Key stacking toggle and capture
+    if (keyStackingEnabled && event.code === stackToggleKey) {
+         // Intercept the key stacking toggle key (matched by event.code string since we want to allow ShiftLeft vs ShiftRight distinction)
+        handleStackToggleKeyDown(event);
+        return;
+    }else if (keyStackingActive) {
+          // While stacking is active, capture the key into the stack instead of sending it
+        handleStackModeKeyDown(event);
+        return;
+    }
+
+    // Ordinary key press, send to server as usual
     const key = event.key;
+    let keyCode = applyCtrlCmdSwap(event.keyCode);
+    let swappedKey = applyCtrlCmdSwapKey(key);
     let hidCommand = {
-        event: 0,
-        keycode: event.keyCode
+        event: HIDEvent.KEY_DOWN,
+        keycode: keyCode
     };
 
     if (enableKvmEventDebugPrintout) {
-        console.log(`Key down: ${key} (code: ${event.keyCode})`);
+        console.log(`Key down: ${key} (code: ${event.keyCode}) -> sent code: ${keyCode}`);
     }
 
     // Check if the key is a modkey on the right side of the keyboard
     const rightModKeys = ['Control', 'Alt', 'Shift', 'Meta'];
-    if (rightModKeys.includes(key) && event.location === 2) {
+    if (rightModKeys.includes(swappedKey) && event.location === 2) {
         hidCommand.is_right_modifier_key = true;
     }else if (key === 'Enter' && isNumpadEvent(event)) {
         //Special case for Numpad Enter
@@ -237,22 +429,41 @@ function handleKeyDown(event) {
 }
 
 function handleKeyUp(event) {
+    // Always swallow keyUp for the toggle key itself
     event.preventDefault();
     event.stopImmediatePropagation();
+
+    // Key Stacking events
+    if (keyStackingEnabled && event.code === stackToggleKey) {
+        //Toggle key released
+        return;
+    }else if (_suppressKeyUpCodes.has(event.code)) {
+        // Swallow keyUp for keys that were captured into the stack
+        _suppressKeyUpCodes.delete(event.code);
+        return;
+    }else if (keyStackingActive) {
+        // Also suppress keyUp for any key pressed while stacking is still active
+        handleStackModeKeyUp(event);
+        return;
+    }
+
+    // Ordinary key release, send to server as usual
     const key = event.key;
-    
+    let keyCode = applyCtrlCmdSwap(event.keyCode);
+    let swappedKey = applyCtrlCmdSwapKey(key);
+
     let hidCommand = {
-        event: 1,
-        keycode: event.keyCode
+        event: HIDEvent.KEY_UP,
+        keycode: keyCode
     };
 
     if (enableKvmEventDebugPrintout) {
-        console.log(`Key up: ${key} (code: ${event.keyCode})`);
+        console.log(`Key up: ${key} (code: ${event.keyCode}) -> sent code: ${keyCode}`);
     }
 
     // Check if the key is a modkey on the right side of the keyboard
     const rightModKeys = ['Control', 'Alt', 'Shift', 'Meta'];
-    if (rightModKeys.includes(key) && event.location === 2) {
+    if (rightModKeys.includes(swappedKey) && event.location === 2) {
         hidCommand.is_right_modifier_key = true;
     } else if (key === 'Enter' && isNumpadEvent(event)) {
         //Special case for Numpad Enter
@@ -269,6 +480,146 @@ function handleKeyUp(event) {
     }
 }
 
+/*
+    Paste capture event handler
+*/
+
+function handlePasteEvent(event) {
+    //Check if there are any settings / modal open, if yes don't capture paste events
+    if (pausePasteCapture){
+        return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    let paste = (event.clipboardData || window.clipboardData).getData("text");
+    console.log("paste event: ", paste);
+    openPasteModal(paste);
+}
+
+function openPasteModal(clipText) {
+    var preview = clipText ? clipText.substring(0, 120) : '';
+    if (clipText && clipText.length > 120) preview += '…';
+    var escapedPreview = $('<span>').text(preview).html();
+    var modKey = swapCtrlCmd ? 'Cmd' : 'Ctrl';
+
+    //Check if clipboard is empty, if yes send Ctrl+V directly
+    if (!clipText) {
+        pastePromptSendKey();
+        return;
+    }
+
+    var modal = $('#pastePromptModal');
+    modal.find('.paste-prompt-preview').html(escapedPreview || '<i>(empty clipboard)</i>');
+    modal.find('.paste-prompt-sendkey-label').text('Send ' + modKey + '+V to remote');
+    modal.data('clipText', clipText);
+    pausePasteCapture = true;
+
+    modal.modal({
+        closable: true,
+        onHidden: function() {
+            pausePasteCapture = false;
+        }
+    }).modal('show');
+}
+
+function pastePromptSendText() {
+    var modal = $('#pastePromptModal');
+    var clipText = modal.data('clipText') || '';
+    modal.modal('hide');
+    if (!clipText) {
+        $.toast({ message: '<i class="yellow exclamation triangle icon"></i> Clipboard is empty', duration: 3000 });
+        return;
+    }
+    document.getElementById('pasteTextarea').innerHTML = (clipText);
+    setTimeout(function() {
+        //Reusing paste-box.js, sendPasteText() will do the textarea cleanup after sending the text, 
+        // so no need to clear it here
+        sendPasteText();
+    }, 500);
+}
+
+function pastePromptSendKey() {
+    $('#pastePromptModal').modal('hide');
+    // Send Ctrl+V (or Meta+V if swapped) as key down/up
+    var modKeyCode = swapCtrlCmd ? 91 : 17; // Meta or Ctrl
+    var vKeyCode = 86; // V
+    if (!hidsocket || hidsocket.readyState !== WebSocket.OPEN) return;
+    // Modifier down
+    hidsocket.send(JSON.stringify({ event: HIDEvent.KEY_DOWN, keycode: modKeyCode, is_right_modifier_key: false }));
+    // V down
+    hidsocket.send(JSON.stringify({ event: HIDEvent.KEY_DOWN, keycode: vKeyCode, is_right_modifier_key: false }));
+    // V up
+    hidsocket.send(JSON.stringify({ event: HIDEvent.KEY_UP, keycode: vKeyCode, is_right_modifier_key: false }));
+    // Modifier up
+    hidsocket.send(JSON.stringify({ event: HIDEvent.KEY_UP, keycode: modKeyCode, is_right_modifier_key: false }));
+}
+
+/*
+    Send a stacked key combo with ACK: all keydowns first, then all keyups.
+    E.g. stack=[Ctrl, Alt, Del] → keydown Ctrl, keydown Alt, keydown Del,
+                                   keyup  Ctrl, keyup  Alt, keyup  Del.
+*/
+async function sendKeyStackWithAck(stack) {
+    // All key-downs in order
+    for (const entry of stack) {
+        await sendHidWithAck({ event: HIDEvent.KEY_DOWN, keycode: entry.keycode, is_right_modifier_key: entry.isRightModKey });
+    }
+    // All key-ups in the same order
+    for (const entry of stack) {
+        await sendHidWithAck({ event: HIDEvent.KEY_UP, keycode: entry.keycode, is_right_modifier_key: entry.isRightModKey });
+    }
+    console.log('[KeyStack] Combo sent.');
+}
+
+/*
+    ACK-based HID send: sends a HID command and waits for the backend to
+    confirm it was written to the serial port before resolving.
+    Timeout at 500ms as a safety net.
+*/
+function sendHidWithAck(hidCommand) {
+    return new Promise(function(resolve) {
+        if (!hidsocket || hidsocket.readyState !== WebSocket.OPEN) {
+            resolve('error');
+            return;
+        }
+        var rid = 'r' + (++_hidAckCounter);
+        hidCommand.rid = rid;
+
+        var timer = setTimeout(function() {
+            if (_hidPendingAcks[rid]) {
+                delete _hidPendingAcks[rid];
+                resolve('timeout');
+            }
+        }, 500);
+
+        _hidPendingAcks[rid] = { resolve: resolve, timer: timer };
+        hidsocket.send(JSON.stringify(hidCommand));
+
+        if (_hidAckCounter > 1e6) {
+            // Prevent _hidAckCounter overflow in long sessions
+            _hidAckCounter = 0;
+        }
+    });
+}
+
+/*
+    Send a single key press+release with ACK. Waits for the MCU to confirm
+    the final release before resolving, so the next keystroke is safe to send.
+*/
+async function sendKeyPressWithAck(keycode, needsShift) {
+    if (needsShift) {
+        await sendHidWithAck({ event: HIDEvent.KEY_DOWN, keycode: 16, is_right_modifier_key: false });
+    }
+    await sendHidWithAck({ event: HIDEvent.KEY_DOWN, keycode: keycode, is_right_modifier_key: false });
+    await sendHidWithAck({ event: HIDEvent.KEY_UP, keycode: keycode, is_right_modifier_key: false });
+    if (needsShift) {
+        await sendHidWithAck({ event: HIDEvent.KEY_UP, keycode: 16, is_right_modifier_key: false });
+    }
+}
+
+
 /* Start and Stop HID events */
 function attachHidEventListeners() {
     const remoteCaptureEle = document.getElementById(cursorCaptureElementId);
@@ -280,13 +631,9 @@ function attachHidEventListeners() {
     // Attach keyboard event listeners to document (so they work globally)
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('keyup', handleKeyUp);
+    document.addEventListener('paste', handlePasteEvent);
+    
 
-    // Attach mouse event listeners to capture element
-    remoteCaptureEle.addEventListener('click', function(event){
-        event.preventDefault();
-        //console.log('Capture element clicked, focusing for keyboard input.');
-        remoteCaptureEle.focus();
-    });
     remoteCaptureEle.addEventListener('mousemove', handleMouseMove);
     remoteCaptureEle.addEventListener('mousedown', handleMousePress);
     remoteCaptureEle.addEventListener('mouseup', handleMouseRelease);
@@ -305,6 +652,7 @@ function detachHidEventListeners() {
     // Remove keyboard event listeners from document
     document.removeEventListener('keydown', handleKeyDown);
     document.removeEventListener('keyup', handleKeyUp);
+    document.removeEventListener('paste', handlePasteEvent);
 
     // Remove mouse event listeners from capture element
     remoteCaptureEle.removeEventListener('mousemove', handleMouseMove);
@@ -330,14 +678,23 @@ function startHidWebSocket(){
         // Send a soft reset command to the server to reset the HID state
         // that possibly got out of sync from previous session
         const hidResetCommand = {
-            event: 0xFF
+            event: HIDEvent.RESET
         };
         hidsocket.send(JSON.stringify(hidResetCommand));
     });
 
     hidsocket.addEventListener('message', function(event) {
-        //Todo: handle control signals from server if needed
-        //console.log('Message from server ', event.data);
+        // Handle ACK replies from backend
+        try {
+            var msg = JSON.parse(event.data);
+            if (msg.rid && _hidPendingAcks[msg.rid]) {
+                clearTimeout(_hidPendingAcks[msg.rid].timer);
+                _hidPendingAcks[msg.rid].resolve(msg.status);
+                delete _hidPendingAcks[msg.rid];
+            }
+        } catch(e) {
+            // Not JSON or not an ACK — ignore
+        }
     });
 
   
@@ -361,7 +718,7 @@ function stopHidWebSocket(){
 function resetRemoteHID() {
     if (hidsocket && hidsocket.readyState === WebSocket.OPEN) {
         const hidResetCommand = {
-            event: 0xFF
+            event: HIDEvent.RESET
         };
         hidsocket.send(JSON.stringify(hidResetCommand));
         console.log('HID reset command sent');

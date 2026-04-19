@@ -12,6 +12,46 @@ let activeTerminalId = null; // Currently active terminal
 
 $(document).ready(function() {
     listInstances();
+    if (window.location.hash) {
+        try {
+            const hashData = JSON.parse(decodeURIComponent(window.location.hash.substring(1)));
+            if (hashData.type === 'instance' && hashData.sessionId) {
+                $.toast({
+                    message: `Resume previous session?`,
+                    closeIcon: false,
+                    actions:[{
+                            text: 'Yes',
+                            class: 'mini basic green',
+                            click: function() {
+                                const sessionId = hashData.sessionId;
+                                startSession(sessionId);
+                            }
+                        },{
+                            text: 'No',
+                            class: 'mini basic',
+                            click: function() {
+                                window.location.hash = '';
+                            }
+                        }],
+                    onVisible: function() {
+                        
+                        $('#resumeSessionBtn').on('click', function() {
+                            
+                            $(this).closest('.toast-box').find('.close').click();
+                        });
+                        $('#dismissResumeBtn').on('click', function() {
+                            
+                            $(this).closest('.toast-box').find('.close').click();
+                        });
+                    }
+                });
+            } else if (hashData.type === 'terminal' && hashData.terminalId) {
+                switchTerminal(hashData.terminalId);
+            }
+        } catch (e) {
+            console.error('Failed to parse URL hash:', e);
+        }
+    }
 });
 
 function hideAllViewports() {
@@ -123,6 +163,10 @@ $('#sessionContext').on('load', function() {
 
 function connectToSession(sessionId, callback=undefined) {
     $('#sessionContext').attr('src', `/viewport.html?ts=${Date.now()}#${sessionId}`);
+    window.location.hash = encodeURIComponent(JSON.stringify({
+        type: 'instance',
+        sessionId: sessionId
+    }));
     if (callback) callback();
 }
 

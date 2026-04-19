@@ -9,9 +9,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/tarm/serial v0.0.0-20180830185346-98f6abe2eb07
 	github.com/vladimirvivien/go4vl v0.0.5
+	golang.org/x/sys v0.31.0
 )
 
-require (
-	github.com/gorilla/securecookie v1.1.2 // indirect
-	golang.org/x/sys v0.31.0 // indirect
-)
+require github.com/gorilla/securecookie v1.1.2 // indirect

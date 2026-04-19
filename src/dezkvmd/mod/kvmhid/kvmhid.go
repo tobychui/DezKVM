@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/tarm/serial"
+	tserial "github.com/tarm/serial"
 )
 
 func NewHIDController(config *Config) *Controller {
@@ -26,21 +26,22 @@ func NewHIDController(config *Config) *Controller {
 		writeQueue:        make(chan []byte, 32),
 		incomingDataQueue: make(chan []byte, 1024),
 		readCloseChan:     make(chan bool),
+		lastActivityTime:  time.Now(),
 	}
 }
 
 // Connect opens the serial port and starts reading from it
 func (c *Controller) Connect() error {
 	// Open the serial port
-	config := &serial.Config{
+	config := &tserial.Config{
 		Name:        c.Config.PortName,
 		Baud:        c.Config.BaudRate,
 		Size:        8,
-		Parity:      serial.ParityNone,
+		Parity:      tserial.ParityNone,
 		ReadTimeout: time.Millisecond * 500,
 	}
 
-	port, err := serial.OpenPort(config)
+	port, err := tserial.OpenPort(config)
 	if err != nil {
 		return err
 	}
@@ -172,6 +173,7 @@ func (c *Controller) WaitForReply(cmdByte byte) ([]byte, error) {
 }
 
 func (c *Controller) Close() {
+	c.StopMouseJiggler()
 	c.serialRunning = false
 	c.readCloseChan <- true
 	if c.serialPort != nil {

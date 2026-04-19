@@ -38,8 +38,8 @@
 
 .settings-close-btn{
     position: absolute;
-    top: 0.5em;
-    right: 0.6em;
+    top: 1.2em;
+    right: 1.8em;
     z-index: 10;
     background: transparent;
     border: none;
@@ -212,8 +212,11 @@
                 <a class="item" data-tab="storage">
                     <i class="hdd icon"></i> Storage
                 </a>
-                <a class="item" data-tab="keyboard-mouse">
-                    <i class="keyboard icon"></i> Keyboard &amp; Mouse
+                <a class="item" data-tab="mouse">
+                    <i class="mouse icon"></i> Mouse
+                </a>
+                   <a class="item" data-tab="keyboard">
+                    <i class="keyboard icon"></i> Keyboard
                 </a>
                 <a class="item" data-tab="session">
                     <i class="exchange alternate icon"></i> Session
@@ -255,6 +258,14 @@
                     <p class="field-description">Enter or exit browser fullscreen mode.</p>
                     <button class="ui button" onclick="toggleFullScreen()">
                         <i class="expand icon"></i> Toggle Fullscreen
+                    </button>
+                </div>
+
+                <div class="settings-field">
+                    <label>Reconnect V4l2 Device</label>
+                    <p class="field-description">Reconnect & restart the V4l2 device</p>
+                    <button class="ui red button" onclick="reconnectV4l2Device()">
+                        <i class="refresh icon"></i> Reconnect
                     </button>
                 </div>
             </div>
@@ -302,11 +313,11 @@
                 </div>
             </div>
 
-            <!-- Keyboard & Mouse -->
-            <div class="settings-tab-content" data-tab="keyboard-mouse">
+            <!-- Mouse -->
+            <div class="settings-tab-content" data-tab="mouse">
                 <h3 class="ui header">
-                    <i class="keyboard icon"></i>
-                    <div class="content">Keyboard &amp; Mouse</div>
+                    <i class="mouse icon"></i>
+                    <div class="content">Mouse</div>
                 </h3>
                 <div class="ui divider"></div>
 
@@ -320,13 +331,55 @@
                 </div>
 
                 <div class="settings-field">
+                    <label>Mouse Jiggler</label>
+                    <p class="field-description">Enable mouse jiggler after 30 seconds of inactivity.</p>
+                    <div class="ui toggle checkbox" id="mouseJigglerCheckbox">
+                        <input type="checkbox" id="chkMouseJiggler" onchange="toggleMouseJiggler()">
+                        <label>Enable mouse jiggler</label>
+                    </div>
+                </div>
+
+                <div class="settings-field">
+                    <label>Invert Scrollwheel</label>
+                    <p class="field-description">Invert the direction of the scrollwheel on the remote display.</p>
+                    <div class="ui toggle checkbox" id="invertScrollwheelCheckbox">
+                        <input type="checkbox" id="chkInvertScrollwheel" onchange="toggleInvertScrollwheel()">
+                        <label>Enable invert scrollwheel</label>
+                    </div>
+                </div>
+
+                <div class="settings-field">
+                    <label>Scrollwheel Sensitivity</label>
+                    <p class="field-description">Adjust the sensitivity of the scrollwheel on the remote display.</p>
+                    <br>
+                    <div id="scrollwheelSensitivity" class="ui labeled ticked slider"></div>
+                </div>  
+
+                <div class="settings-field">
+                    <label>Relative Mouse Mode</label>
+                    <p class="field-description">Enable or disable relative mouse mode on the remote display.</p>
+                    <div class="ui toggle checkbox" id="relativeMouseModeCheckbox">
+                        <input type="checkbox" id="chkSettingsRelativeMouseMode" class="auto-save-setting" onchange="toggleRelativeMouseMode()">
+                        <label>Relative mouse mode</label>
+                    </div>
+                </div>
+
+                <div class="settings-field">
+                    <label>Relative Mouse Sensitivity</label>
+                    <p class="field-description">Adjust movement sensitivity of the relative mouse mode.</p>
+                    <br>
+                    <div id="relativeMouseSensitivity" class="ui labeled ticked slider"></div>
+                </div>  
+
+                <div class="settings-field">
                     <label>Reset HID Device</label>
                     <p class="field-description">Reset the remote HID (keyboard &amp; mouse) if input becomes unresponsive.</p>
-                    <button class="ui button" onclick="resetRemoteHID()">
+                    <button class="ui basic red button" onclick="resetRemoteHID()">
                         <i class="refresh icon"></i> Reset HID
                     </button>
                 </div>
 
+                <!-- 
                 <div class="settings-field">
                     <label>On-Screen Keyboard</label>
                     <p class="field-description">Show or hide the on-screen virtual keyboard.</p>
@@ -350,7 +403,74 @@
                         <i class="copy icon"></i> Copy with OCR
                     </button>
                 </div>
+                -->
             </div>
+
+            <!-- keyboard -->
+            <div class="settings-tab-content" data-tab="keyboard">
+                <h3 class="ui header">
+                    <i class="keyboard icon"></i>
+                    <div class="content">Keyboard</div>
+                </h3>
+                <div class="ui divider"></div>
+                <div class="settings-field">
+                    <label>Swap Ctrl and Command Button</label>
+                    <p class="field-description">Send CMD when pressing CTRL and vice versa.</p>
+                    <div class="ui toggle checkbox" id="swapCtrlCmdCheckbox">
+                        <input type="checkbox" id="chkSettingsSwapCtrlCmd" onchange="toggleSwapCtrlCmd()" checked>
+                        <label>Enable CTRL-CMD swap</label>
+                    </div>
+                </div>
+                <div class="settings-field">
+                    <label>Ask on Paste</label>
+                    <p class="field-description">Ask each time if you want to paste text into the remote machine or send Ctrl+V</p>
+                    <div class="ui toggle checkbox" id="askOnPasteCheckbox">
+                        <input type="checkbox" id="chkSettingsAskOnPaste" onchange="toggleAskOnPaste()" checked>
+                        <label>Enable Ask on Paste</label>
+                    </div>
+                </div>
+                <div class="settings-field">
+                    <label>Enable Key Stacking</label>
+                    <p class="field-description">Enable stacking of key presses for more complex input sequences.<br>
+                    <small>(Similar to Magic Key on PiKVM)</small></p>
+                    <div class="ui toggle checkbox" id="keyStackingCheckbox">
+                        <input type="checkbox" id="chkSettingsKeyStacking" onchange="toggleKeyStacking()" checked>
+                        <label>Enable Key Stacking</label>
+                    </div>
+                </div>
+                <div class="settings-field">
+                    <label>Stack Toggle Key</label>
+                    <p class="field-description">The key used to toggle key stacking mode, usually a rarely used key like Scroll Lock.</p>
+                    <select id="settingsStackToggleKeySelect" class="ui fluid dropdown" onchange="onChangeStackToggleKey(this.value)">
+                        <option value="ShiftRight">Right Shift</option>
+                        <option value="ControlRight">Right Ctrl</option>
+                        <option value="ContextMenu">Menu (Context)</option>
+                        <option value="ScrollLock">Scroll Lock</option>
+                        <option value="Pause">Pause / Break</option>
+                        <option value="NumLock">Num Lock</option>
+                        <option value="F1">F1</option>
+                        <option value="F2">F2</option>
+                        <option value="F3">F3</option>
+                        <option value="F4">F4</option>
+                        <option value="F5">F5</option>
+                        <option value="F6">F6</option>
+                        <option value="F7">F7</option>
+                        <option value="F8">F8</option>
+                        <option value="F9">F9</option>
+                        <option value="F10">F10</option>
+                        <option value="F11">F11</option>
+                        <option value="F12">F12</option>
+                    </select>
+                </div>
+                <!-- This is the same one as the mouse option, just a copy for user experience reasons -->
+                 <div class="settings-field">
+                    <label>Reset HID Device</label>
+                    <p class="field-description">Reset the remote HID (keyboard &amp; mouse) if input becomes unresponsive.</p>
+                    <button class="ui basic red button" onclick="resetRemoteHID()">
+                        <i class="refresh icon"></i> Reset HID
+                    </button>
+                </div>
+            </div>  
 
             <!-- Session -->
             <div class="settings-tab-content" data-tab="session">
@@ -378,7 +498,38 @@
     if(typeof $ !== 'undefined' && $.fn.checkbox){
         $('#scaleToFitCheckbox').checkbox();
         $('#showLocalCursorCheckbox').checkbox();
+        $('#invertScrollwheelCheckbox').checkbox();
+        $('#mouseJigglerCheckbox').checkbox();
+        $('#relativeMouseModeCheckbox').checkbox();
+        $('#swapCtrlCmdCheckbox').checkbox();
+        $('#askOnPasteCheckbox').checkbox();
+        $('#keyStackingCheckbox').checkbox();
     }
+
+    /* Scrollwheel sensitivity slider (1-10, default 2) */
+    $('#scrollwheelSensitivity').slider({
+        min: 1,
+        max: 10,
+        start: 3,
+        step: 1,
+        onChange: function(value) {
+            saveCurrentPreferences(`<i class="ui green check circle icon"></i> Scrollwheel sensitivity set to ${value}`);
+        }
+    });
+
+    /* Relative mouse sensitivity slider (1-10, default 5) */
+    $('#relativeMouseSensitivity').slider({
+        min: 1,
+        max: 10,
+        start: 5,
+        step: 1,
+        onChange: function(value) {
+            if(typeof relativeMouseSensitivity !== 'undefined'){
+                relativeMouseSensitivity = value;
+            }
+            saveCurrentPreferences(`<i class="ui green check circle icon"></i> Relative mouse sensitivity set to ${value}`);
+        }
+    });
 
     /* Tab switching */
     $(".settings-category-menu .item").on("click", function(){
@@ -449,17 +600,132 @@
         });
     }
 
+    /* Sync invert scrollwheel checkbox state */
+    function syncInvertScrollwheel(prefs){
+        var enabled = prefs ? prefs.invert_scroll_direction : false;
+        var checkbox = document.getElementById('chkInvertScrollwheel');
+        if(!checkbox) return;
+        checkbox.checked = enabled;
+        if(typeof $ !== 'undefined' && $('#invertScrollwheelCheckbox').checkbox){
+            $('#invertScrollwheelCheckbox').checkbox(enabled ? 'check' : 'uncheck');
+        }
+    }
+
+    /* Sync mouse jiggler checkbox state */
+    function syncMouseJiggler(prefs){
+        var enabled = prefs ? prefs.enable_mouse_jiggler : false;
+        var checkbox = document.getElementById('chkMouseJiggler');
+        if(!checkbox) return;
+        checkbox.checked = enabled;
+        if(typeof $ !== 'undefined' && $('#mouseJigglerCheckbox').checkbox){
+            $('#mouseJigglerCheckbox').checkbox(enabled ? 'check' : 'uncheck');
+        }
+    }
+
+    /* Sync scrollwheel sensitivity slider */
+    function syncScrollwheelSensitivity(prefs){
+        var val = prefs ? prefs.scroll_sensitivity : 1;
+        if(!val || val < 1) val = 1;
+        if(val > 10) val = 10;
+        $('#scrollwheelSensitivity').slider('set value', val);
+    }
+
+    /* Sync relative mouse mode checkbox */
+    function syncRelativeMouseMode(prefs){
+        var enabled = prefs ? prefs.enable_relative_mouse_mode : false;
+        var checkbox = document.getElementById('chkSettingsRelativeMouseMode');
+        if(!checkbox) return;
+        checkbox.checked = enabled;
+        if(typeof mouseMoveAbsolute !== 'undefined'){
+            mouseMoveAbsolute = !enabled;
+        }
+        if(typeof $ !== 'undefined' && $('#relativeMouseModeCheckbox').checkbox){
+            $('#relativeMouseModeCheckbox').checkbox(enabled ? 'check' : 'uncheck');
+        }
+        // On session resume, if relative mode is active, prompt user to click viewport
+        if(enabled && !document.pointerLockElement){
+            //if(typeof $ !== 'undefined' && $.toast){
+            //    $.toast({
+            //        message: '<i class="mouse pointer icon"></i> Relative mouse mode is active. Click the viewport to capture the cursor.',
+            //        duration: 5000
+            //    });
+            //}
+        }
+    }
+
+    /* Sync relative mouse sensitivity slider */
+    function syncRelativeMouseSensitivity(prefs){
+        var val = prefs ? prefs.relative_mouse_sensitivity : 5;
+        if(!val || val < 1) val = 1;
+        if(val > 10) val = 10;
+        $('#relativeMouseSensitivity').slider('set value', val);
+        if(typeof relativeMouseSensitivity !== 'undefined'){
+            relativeMouseSensitivity = val;
+        }
+    }
+
+    /* Sync swap CTRL-CMD checkbox */
+    function syncSwapCtrlCmd(prefs){
+        var enabled = prefs ? prefs.swap_ctrl_cmd : false;
+        var checkbox = document.getElementById('chkSettingsSwapCtrlCmd');
+        if(!checkbox) return;
+        checkbox.checked = enabled;
+        if(typeof swapCtrlCmd !== 'undefined'){
+            swapCtrlCmd = enabled;
+        }
+        if(typeof $ !== 'undefined' && $('#swapCtrlCmdCheckbox').checkbox){
+            $('#swapCtrlCmdCheckbox').checkbox(enabled ? 'check' : 'uncheck');
+        }
+    }
+
+    /* Sync ask on paste checkbox */
+    function syncAskOnPaste(prefs){
+        var enabled = prefs ? prefs.ask_on_paste : true;
+        var checkbox = document.getElementById('chkSettingsAskOnPaste');
+        if(!checkbox) return;
+        checkbox.checked = enabled;
+        if(typeof askOnPaste !== 'undefined'){
+            askOnPaste = enabled;
+        }
+        if(typeof $ !== 'undefined' && $('#askOnPasteCheckbox').checkbox){
+            $('#askOnPasteCheckbox').checkbox(enabled ? 'check' : 'uncheck');
+        }
+    }
+
+    /* Fetch all preferences from backend and sync UI */
+    window._syncingPreferences = false;
+    function syncAllPreferences(){
+        if(!kvmDeviceUUID) return;
+        $.get('/api/v1/preferences/' + kvmDeviceUUID, function(prefs){
+            window._syncingPreferences = true;
+            syncInvertScrollwheel(prefs);
+            syncMouseJiggler(prefs);
+            syncScrollwheelSensitivity(prefs);
+            syncRelativeMouseMode(prefs);
+            syncRelativeMouseSensitivity(prefs);
+            syncSwapCtrlCmd(prefs);
+            syncAskOnPaste(prefs);
+            syncKeyStacking(prefs);
+            syncStackToggleKey(prefs);
+            window._syncingPreferences = false;
+        });
+    }
+
     /* Open / close helpers */
     window.openSettingsOverlay = function(){
         syncResolutionDropdown();
         syncAudioDropdown();
         syncScaleToFit();
         syncShowLocalCursor();
+        syncAllPreferences();
         $("#settings-overlay").addClass("visible");
+        pausePasteCapture = true;
     };
+
 
     window.closeSettingsOverlay = function(){
         $("#settings-overlay").removeClass("visible");
+        pausePasteCapture = false;
     };
 
     /* Close on Escape key */
@@ -468,6 +734,37 @@
             closeSettingsOverlay();
         }
     });
+
+    /* One-time setup: pointer lock handlers for relative mouse mode */
+    (function initPointerLockHandlers(){
+        var captureEleId = (typeof cursorCaptureElementId !== 'undefined') ? cursorCaptureElementId : 'remoteCapture';
+        var captureEle = document.getElementById(captureEleId);
+        if(!captureEle) return;
+
+        // Click to re-acquire pointer lock when in relative mode
+        captureEle.addEventListener('click', function(event){
+            if(typeof mouseMoveAbsolute === 'undefined' || mouseMoveAbsolute) return;
+            event.preventDefault();
+            captureEle.focus();
+            if(!document.pointerLockElement){
+                captureEle.requestPointerLock();
+            }
+        });
+
+        // Pointer lock state changes fire on document (per spec)
+        document.addEventListener('pointerlockchange', function(){
+            if(typeof mouseMoveAbsolute === 'undefined' || mouseMoveAbsolute) return;
+            if(!document.pointerLockElement){
+                // Lock was released (e.g. Escape) while relative mode is still active
+                if(typeof $ !== 'undefined' && $.toast){
+                    $.toast({
+                        message: '<i class="mouse pointer icon"></i> Mouse released',
+                        duration: 4000
+                    });
+                }
+            }
+        });
+    })();
 })();
 
 /* 
@@ -588,6 +885,184 @@ function applyShowLocalCursorPreference() {
     } else {
         remoteCaptureEle.classList.add('hide-cursor');
     }
+}
+
+/* 
+    Invert Scrollwheel Functionality 
+*/
+function toggleInvertScrollwheel() {
+    var checkbox = document.getElementById('chkInvertScrollwheel');
+    var enabled = checkbox ? checkbox.checked : false;
+    saveCurrentPreferences(`<i class="ui green check circle icon"></i> Invert scrollwheel ${enabled ? 'enabled' : 'disabled'}`);
+    console.log('Invert scrollwheel:', enabled);
+}
+
+/* 
+    Mouse Jiggler Functionality 
+*/
+function toggleMouseJiggler() {
+    var checkbox = document.getElementById('chkMouseJiggler');
+    var enabled = checkbox ? checkbox.checked : false;
+    saveCurrentPreferences(`<i class="ui green check circle icon"></i> Mouse jiggler ${enabled ? 'enabled' : 'disabled'}`);
+}
+
+/*
+    Relative Mouse Mode Functionality
+*/
+function toggleRelativeMouseMode() {
+    var checkbox = document.getElementById('chkSettingsRelativeMouseMode');
+    var enabled = checkbox ? checkbox.checked : false;
+    if(typeof mouseMoveAbsolute !== 'undefined'){
+        mouseMoveAbsolute = !enabled;
+    }
+    var captureEleId = (typeof cursorCaptureElementId !== 'undefined') ? cursorCaptureElementId : 'remoteCapture';
+    var captureEle = document.getElementById(captureEleId);
+    if (enabled) {
+        // Request pointer lock to confine the cursor to the viewport
+        if (captureEle && captureEle.requestPointerLock) {
+            captureEle.requestPointerLock();
+        }
+        // Hide the settings overlay
+        closeSettingsOverlay();
+    } else {
+        // Release pointer lock when switching back to absolute mode
+        if (document.pointerLockElement) {
+            document.exitPointerLock();
+        }
+    }
+    saveCurrentPreferences(`<i class="ui green check circle icon"></i> Relative mouse mode ${enabled ? 'enabled' : 'disabled'}`);
+    console.log('Relative mouse mode:', enabled);
+}
+
+/*
+    Swap CTRL and CMD Functionality
+*/
+function toggleSwapCtrlCmd() {
+    var checkbox = document.getElementById('chkSettingsSwapCtrlCmd');
+    var enabled = checkbox ? checkbox.checked : false;
+    if(typeof swapCtrlCmd !== 'undefined'){
+        swapCtrlCmd = enabled;
+    }
+    saveCurrentPreferences(`<i class="ui green check circle icon"></i> CTRL-CMD swap ${enabled ? 'enabled' : 'disabled'}`);
+    console.log('Swap CTRL-CMD:', enabled);
+}
+
+/*
+    Ask on Paste Functionality
+*/
+function toggleAskOnPaste() {
+    var checkbox = document.getElementById('chkSettingsAskOnPaste');
+    var enabled = checkbox ? checkbox.checked : false;
+    if(typeof askOnPaste !== 'undefined'){
+        askOnPaste = enabled;
+    }
+    saveCurrentPreferences(`<i class="ui green check circle icon"></i> Ask on paste ${enabled ? 'enabled' : 'disabled'}`);
+    console.log('Ask on paste:', enabled);
+}
+
+/*
+    Key Stacking Functionality
+*/
+function toggleKeyStacking() {
+    var checkbox = document.getElementById('chkSettingsKeyStacking');
+    var enabled = checkbox ? checkbox.checked : false;
+    if(typeof keyStackingEnabled !== 'undefined'){
+        keyStackingEnabled = enabled;
+    }
+    saveCurrentPreferences(`<i class="ui green check circle icon"></i> Key stacking ${enabled ? 'enabled' : 'disabled'}`);
+    console.log('Key stacking:', enabled);
+}
+
+function onChangeStackToggleKey(value) {
+    if(typeof stackToggleKey !== 'undefined'){
+        stackToggleKey = value; // value is already an event.code string
+    }
+    saveCurrentPreferences(`<i class="ui green check circle icon"></i> Stack toggle key updated`);
+}
+
+function syncKeyStacking(prefs) {
+    var enabled = prefs ? prefs.key_stacking_enabled : false;
+    var checkbox = document.getElementById('chkSettingsKeyStacking');
+    if(!checkbox) return;
+    checkbox.checked = enabled;
+    if(typeof keyStackingEnabled !== 'undefined'){
+        keyStackingEnabled = enabled;
+    }
+    if(typeof $ !== 'undefined' && $('#keyStackingCheckbox').checkbox){
+        $('#keyStackingCheckbox').checkbox(enabled ? 'check' : 'uncheck');
+    }
+}
+
+function syncStackToggleKey(prefs) {
+    var code = (prefs && prefs.stack_toggle_key) ? prefs.stack_toggle_key : 'ShiftRight';
+    var sel = document.getElementById('settingsStackToggleKeySelect');
+    if(!sel) return;
+    sel.value = code;
+    if(typeof stackToggleKey !== 'undefined'){
+        stackToggleKey = code;
+    }
+}
+
+/*
+    Save current preferences to backend
+*/
+function saveCurrentPreferences(succmessg = `<i class="ui green check circle icon"></i> Preferences Updated`){
+    if(window._syncingPreferences) return;
+    if(!kvmDeviceUUID){
+        console.warn('KVM device UUID not set, cannot save preferences');
+        return;
+    }
+    var prefs = {
+        invert_scroll_direction: document.getElementById('chkInvertScrollwheel') ? document.getElementById('chkInvertScrollwheel').checked : false,
+        scroll_sensitivity: parseInt($('#scrollwheelSensitivity').slider('get value')) || 1,
+        enable_mouse_jiggler: document.getElementById('chkMouseJiggler') ? document.getElementById('chkMouseJiggler').checked : false,
+        enable_relative_mouse_mode: document.getElementById('chkSettingsRelativeMouseMode') ? document.getElementById('chkSettingsRelativeMouseMode').checked : false,
+        relative_mouse_sensitivity: parseInt($('#relativeMouseSensitivity').slider('get value')) || 5,
+        swap_ctrl_cmd: document.getElementById('chkSettingsSwapCtrlCmd') ? document.getElementById('chkSettingsSwapCtrlCmd').checked : false,
+        ask_on_paste: document.getElementById('chkSettingsAskOnPaste') ? document.getElementById('chkSettingsAskOnPaste').checked : true,
+        key_stacking_enabled: document.getElementById('chkSettingsKeyStacking') ? document.getElementById('chkSettingsKeyStacking').checked : false,
+        stack_toggle_key: document.getElementById('settingsStackToggleKeySelect') ? document.getElementById('settingsStackToggleKeySelect').value : 'ShiftRight'
+    };
+    $.ajax({
+        url: '/api/v1/preferences/' + kvmDeviceUUID,
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(prefs),
+        success: function(data){
+            console.log('Preferences saved');
+            $.toast({
+                message: succmessg,
+                duration: 3000
+            });
+        },
+        error: function(){
+            console.error('Failed to save preferences');
+        }
+    });
+}
+
+/*
+    Reconnect V4L2 & Audio Device
+*/
+function reconnectV4l2Device() {
+    if (!kvmDeviceUUID) {
+        $.toast({ message: '<i class="red circle times icon"></i> Device UUID not available', duration: 3000 });
+        return;
+    }
+    $.toast({ message: '<i class="blue spinner loading icon"></i> Reconnecting capture device...', duration: 5000 });
+    closeSettingsOverlay();
+    $.ajax({
+        url: '/api/v1/reconnect/' + kvmDeviceUUID,
+        method: 'POST',
+        success: function() {
+            // Reload the page with the same UUID hash to re-establish all streams and HID
+            window.location.reload();
+        },
+        error: function(xhr) {
+            var msg = xhr.responseText || 'Unknown error';
+            $.toast({ message: '<i class="red circle times icon"></i> Reconnect failed: ' + msg, duration: 5000 });
+        }
+    });
 }
 
 </script>

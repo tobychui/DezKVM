@@ -58,7 +58,17 @@ $(document).ready(function() {
     
     // Apply scale to fit setting if enabled
     if (isScaleToFit) {
-        applyScaleToFit();
+        if (typeof applyScaleToFit === 'function'){
+                applyScaleToFit();
+        }else{
+            // Not loaded yet, retry after a short delay
+            setTimeout(function() {
+                if (typeof applyScaleToFit === 'function') {
+                    applyScaleToFit();
+                }
+            }, 500);
+        }
+        
     }
     
     // Apply show local cursor preference

@@ -2,6 +2,7 @@ package dezkvm
 
 import (
 	"errors"
+	"log"
 
 	"github.com/google/uuid"
 	"imuslab.com/dezkvm/dezkvmd/mod/kvmaux"
@@ -65,6 +66,7 @@ func (i *UsbKvmDeviceInstance) Start() error {
 			return err
 		}
 		i.uuid = uuid.String()
+		i.uuid = "10" + i.uuid[2:] //USB KVM device category is "1", type is "0" (unknown/unspecified)
 	}
 
 	/* --------- Start USB Capture Device --------- */
@@ -78,8 +80,27 @@ func (i *UsbKvmDeviceInstance) Start() error {
 		usbCaptureDevice.Close()
 		return err
 	}
-
 	i.usbCaptureDevice = usbCaptureDevice
+
+	/* --------- Load Preferences --------- */
+	if i.parent != nil {
+		prefs, err := i.parent.LoadPreferences(i.uuid)
+		if err != nil {
+			log.Printf("Warning: failed to load preferences for %s: %v\n", i.uuid, err)
+		}
+		if prefs != nil {
+			i.Preferences = prefs
+		}
+	}
+	if i.Preferences == nil {
+		i.Preferences = DefaultPreferences()
+	}
+	i.ApplyPreferences()
+
+	// All components started successfully — turn off the status LED
+	if i.auxMCUController != nil {
+		_ = i.auxMCUController.SetStatusLED(kvmaux.StatusLEDOff)
+	}
 	return nil
 }
 
@@ -102,4 +123,34 @@ func (i *UsbKvmDeviceInstance) Stop() error {
 // Remove removes the USB KVM device instance from its parent DezkVM manager.
 func (i *UsbKvmDeviceInstance) Remove() error {
 	return i.parent.RemoveUsbKvmDevice(i.UUID())
+}
+
+func (i *UsbKvmDeviceInstance) SetLEDStatus(status kvmaux.StatusLEDPattern) error {
+	if i.auxMCUController == nil {
+		return errors.New("AuxMCU controller is not initialized")
+	}
+	return i.auxMCUController.SetStatusLED(status)
+}
+
+// ApplyPreferences applies the current preferences to the running HID controller.
+func (i *UsbKvmDeviceInstance) ApplyPreferences() {
+	if i.Preferences == nil || i.usbKVMController == nil {
+		return
+	}
+	// Scroll sensitivity
+	sens := i.Preferences.ScrollSensitivity
+	if sens == 0 {
+		sens = 1
+	}
+	i.usbKVMController.Config.ScrollSensitivity = sens
+
+	// Invert scroll direction
+	i.usbKVMController.Config.InvertScrollDirection = i.Preferences.InvertScrollDirection
+
+	// Mouse jiggler
+	if i.Preferences.EnableMouseJiggler {
+		i.usbKVMController.StartMouseJiggler()
+	} else {
+		i.usbKVMController.StopMouseJiggler()
+	}
 }

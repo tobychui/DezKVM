@@ -118,6 +118,10 @@ func (c *Controller) MouseScroll(tilt int) ([]byte, error) {
 		return nil, nil
 	}
 
+	if c.Config.InvertScrollDirection {
+		tilt = -tilt
+	}
+
 	var wheel uint8
 	if tilt < 0 {
 		wheel = uint8(c.Config.ScrollSensitivity)

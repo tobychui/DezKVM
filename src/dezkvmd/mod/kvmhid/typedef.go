@@ -1,7 +1,10 @@
 package kvmhid
 
 import (
-	"github.com/tarm/serial"
+	"sync"
+	"time"
+
+	tserial "github.com/tarm/serial"
 )
 
 type EventType int
@@ -21,9 +24,10 @@ const MinCusorEventInterval = 25 // Minimum interval between cursor events in mi
 
 type Config struct {
 	/* Serial port configs */
-	PortName          string
-	BaudRate          int
-	ScrollSensitivity uint8 // Mouse scroll sensitivity, range 0x00 to 0x7E
+	PortName              string
+	BaudRate              int
+	ScrollSensitivity     uint8 // Mouse scroll sensitivity, range 0x00 to 0x7E
+	InvertScrollDirection bool  // Invert the scroll direction
 }
 
 type HIDState struct {
@@ -43,17 +47,23 @@ type Controller struct {
 	Config *Config
 
 	/* Internal state */
-	serialPort          *serial.Port
+	serialPort          *tserial.Port
 	hidState            HIDState // Current state of the HID device
 	serialRunning       bool
 	writeQueue          chan []byte
 	incomingDataQueue   chan []byte // Queue for incoming data
 	lastCursorEventTime int64
 	readCloseChan       chan bool
+
+	/* Mouse Jiggler */
+	jiggler          jigglerState
+	activityMu       sync.Mutex
+	lastActivityTime time.Time
 }
 
 type HIDCommand struct {
 	Event                EventType `json:"event"`
+	Rid                  string    `json:"rid,omitempty"`                    // Reply ID — if set, backend sends an ACK after the command is processed
 	Keycode              int       `json:"keycode,omitempty"`
 	IsRightModKey        bool      `json:"is_right_modifier_key,omitempty"`   // true if the key is a right modifier key (Ctrl, Shift, Alt, GUI)
 	MouseAbsX            int       `json:"mouse_x,omitempty"`                 // Absolute mouse position in X direction

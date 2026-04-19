@@ -25,10 +25,39 @@ type UsbKvmDeviceOption struct {
 	/* Communication Settings */
 	USBKVMBaudrate int `json:"usb_kvm_baudrate"` // Baudrate for USB KVM HID communication, e.g., 115200
 	AuxMCUBaudrate int `json:"aux_mcu_baudrate"` // Baudrate for auxiliary MCU communication, e.g., 115200
+
+}
+
+type UsbKvmPreferences struct {
+	/* HID Preferences */
+	InvertScrollDirection    bool   `json:"invert_scroll_direction"`    // Whether to invert the mouse scroll direction
+	ScrollSensitivity        uint8  `json:"scroll_sensitivity"`         // Mouse scroll sensitivity
+	EnableMouseJiggler       bool   `json:"enable_mouse_jiggler"`       // Whether to enable the mouse jiggler to prevent screen lock
+	EnableRelativeMouseMode  bool   `json:"enable_relative_mouse_mode"` // Whether to enable relative mouse mode
+	RelativeMouseSensitivity uint8  `json:"relative_mouse_sensitivity"` // Sensitivity for relative mouse movements
+	SwapCtrlCmd              bool   `json:"swap_ctrl_cmd"`              // Whether to swap CTRL and CMD (Meta) keys
+	AskOnPaste               bool   `json:"ask_on_paste"`               // Whether to prompt the user when pasting
+	KeyStackingEnabled       bool   `json:"key_stacking_enabled"`       // Whether key stacking (sequential modifier combo) mode is enabled
+	StackToggleKey           string `json:"stack_toggle_key"`           // event.code string of the key used to toggle key stacking (e.g. "ShiftRight")
+}
+
+func DefaultPreferences() *UsbKvmPreferences {
+	return &UsbKvmPreferences{
+		InvertScrollDirection:    false,
+		ScrollSensitivity:        3,
+		EnableMouseJiggler:       false,
+		EnableRelativeMouseMode:  false,
+		RelativeMouseSensitivity: 5,
+		SwapCtrlCmd:              false,
+		AskOnPaste:               true,
+		KeyStackingEnabled:       false,
+		StackToggleKey:           "ShiftRight",
+	}
 }
 
 type UsbKvmDeviceInstance struct {
-	Config *UsbKvmDeviceOption
+	Config      *UsbKvmDeviceOption //
+	Preferences *UsbKvmPreferences
 
 	/* Processed Configs */
 	captureConfig         *usbcapture.Config
@@ -43,10 +72,14 @@ type UsbKvmDeviceInstance struct {
 }
 
 type RuntimeOptions struct {
-	EnableLog bool `json:"enable_log"` // Enable or disable logging
+	EnableLog        bool   `json:"enable_log"`         // Enable or disable logging
+	ConfigFolderPath string `json:"config_folder_path"` // Path to the folder where instance-specific configs will be stored
 }
 type DezkVM struct {
 	UsbKvmInstance []*UsbKvmDeviceInstance
+
+	/* Config Folder Path */
+	ConfigFolderPath string `json:"config_folder_path"` // Path to the folder where instance-specific configs and logs will be stored
 
 	/* Internals */
 	occupiedUUIDs map[string]bool // Track occupied UUIDs to prevent duplicate connections

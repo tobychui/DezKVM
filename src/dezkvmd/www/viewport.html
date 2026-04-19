@@ -71,13 +71,48 @@
     </div>
 
     <!-- Paste Box Modal -->
-    <div id="pasteBox" class="paste-box-container" style="display: none;"></div>
+    <div id="pasteBox" class="paste-box-container tools-window" style="display: none;"></div>
 
     <!-- Onscreen Keyboard -->
     <div id="onscreenKeyboard" class="onscreen-keyboard" style="display: none;"></div>
    
     <!-- Settings -->
-    <div id="settings-overlay" class=""></div>
+    <div id="settings-overlay" class="tools-window"></div>
+
+    <!-- Paste Prompt Modal (Ask on Paste) -->
+    <div id="pastePromptModal" class="ui tiny modal">
+        <div class="header">
+            <i class="paste icon"></i> Paste Detected
+        </div>
+        <div class="content">
+            <p>You pressed paste. What would you like to send?</p>
+            <div class="ui segment">
+                <p style="font-size:0.9em; color:#555; margin:0; word-break:break-all;" class="paste-prompt-preview"></p>
+            </div>
+        </div>
+        <div class="actions">
+            <button class="ui small basic blue button" onclick="pastePromptSendText()">
+                Local Clipboard Text
+            </button>
+            <button class="ui small basic purple basic button" onclick="pastePromptSendKey()">
+                <span class="paste-prompt-sendkey-label">Ctrl+V Keypress</span>
+            </button>
+            <button class="ui small basic cancel button">
+                Cancel
+            </button>
+        </div>
+    </div>
+
+    <!-- Key Stack Display -->
+    <div id="keystackDisplay" style="display:none;">
+        <button class="ui mini red icon button" onclick="clearKeyStack()" title="Clear Key Stack">
+            <i class="close icon"></i>
+        </button>
+        <div id="keystackContent" style="display:inline-block; margin-left: 0.4em;">
+            <!-- keystack overview will show here -->
+        </div>
+    </div>
+
     <script src="js/viewport.js"></script>
     <script src="js/kvmevt.js"></script>
     <script src="js/ocr-copy.js"></script>

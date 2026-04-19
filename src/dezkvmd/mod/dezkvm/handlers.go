@@ -3,7 +3,9 @@ package dezkvm
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
+	"imuslab.com/dezkvm/dezkvmd/mod/kvmaux"
 	"imuslab.com/dezkvm/dezkvmd/mod/usbcapture"
 )
 
@@ -13,6 +15,7 @@ func (d *DezkVM) HandleVideoStreams(w http.ResponseWriter, r *http.Request, inst
 		http.Error(w, "Instance with specified UUID not found", http.StatusNotFound)
 		return
 	}
+	// Serve the video stream
 	targetInstance.usbCaptureDevice.ServeVideoStream(w, r)
 }
 
@@ -32,7 +35,15 @@ func (d *DezkVM) HandleHIDEvents(w http.ResponseWriter, r *http.Request, instanc
 		http.Error(w, "Instance with specified UUID not found", http.StatusNotFound)
 		return
 	}
+	// Set status LED to blinking pattern while connection is active
+	if targetInstance.auxMCUController != nil {
+		_ = targetInstance.auxMCUController.SetStatusLED(kvmaux.StatusLEDOn)
+	}
 	targetInstance.usbKVMController.HIDWebSocketHandler(w, r)
+	if targetInstance.auxMCUController != nil {
+		// Set status LED back to solid on after connection ends
+		_ = targetInstance.auxMCUController.SetStatusLED(kvmaux.StatusLEDOff)
+	}
 }
 
 // HandleMassStorageSideSwitch handles the request to switch the USB mass storage side.
@@ -156,4 +167,133 @@ func (d *DezkVM) HandleScreenshot(w http.ResponseWriter, r *http.Request, instan
 
 	// Serve the screenshot
 	targetInstance.usbCaptureDevice.ServeScreenshot(w, r)
+}
+
+// HandleMouseJiggler toggles the mouse jiggler for a given instance.
+// POST enables or disables based on the JSON body {"enabled": true/false}.
+// GET returns the current state.
+func (d *DezkVM) HandleMouseJiggler(w http.ResponseWriter, r *http.Request, instanceUuid string) {
+	targetInstance, err := d.GetInstanceByUUID(instanceUuid)
+	if err != nil {
+		http.Error(w, "Instance with specified UUID not found", http.StatusNotFound)
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{
+			"enabled": targetInstance.usbKVMController.IsMouseJigglerEnabled(),
+		})
+		return
+	}
+
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Enabled {
+		targetInstance.usbKVMController.StartMouseJiggler()
+	} else {
+		targetInstance.usbKVMController.StopMouseJiggler()
+	}
+
+	// Update preferences
+	if targetInstance.Preferences == nil {
+		targetInstance.Preferences = DefaultPreferences()
+	}
+	targetInstance.Preferences.EnableMouseJiggler = req.Enabled
+	_ = d.SavePreferences(targetInstance)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]bool{
+		"enabled": req.Enabled,
+	})
+}
+
+// HandleGetPreferences returns the current preferences for a given instance.
+func (d *DezkVM) HandleGetPreferences(w http.ResponseWriter, r *http.Request, instanceUuid string) {
+	targetInstance, err := d.GetInstanceByUUID(instanceUuid)
+	if err != nil {
+		http.Error(w, "Instance with specified UUID not found", http.StatusNotFound)
+		return
+	}
+	if targetInstance.Preferences == nil {
+		targetInstance.Preferences = DefaultPreferences()
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(targetInstance.Preferences)
+}
+
+// HandleSetPreferences updates the preferences for a given instance and persists them to disk.
+func (d *DezkVM) HandleSetPreferences(w http.ResponseWriter, r *http.Request, instanceUuid string) {
+	targetInstance, err := d.GetInstanceByUUID(instanceUuid)
+	if err != nil {
+		http.Error(w, "Instance with specified UUID not found", http.StatusNotFound)
+		return
+	}
+
+	var prefs UsbKvmPreferences
+	if err := json.NewDecoder(r.Body).Decode(&prefs); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	targetInstance.Preferences = &prefs
+	targetInstance.ApplyPreferences()
+
+	// Persist to disk
+	if err := d.SavePreferences(targetInstance); err != nil {
+		http.Error(w, "Failed to save preferences: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(targetInstance.Preferences)
+}
+
+// HandleReconnectCapture closes the V4L2 and audio devices and restarts them.
+// The frontend should reload the page after this completes to re-establish streams.
+func (d *DezkVM) HandleReconnectCapture(w http.ResponseWriter, r *http.Request, instanceUuid string) {
+	targetInstance, err := d.GetInstanceByUUID(instanceUuid)
+	if err != nil {
+		http.Error(w, "Instance with specified UUID not found", http.StatusNotFound)
+		return
+	}
+
+	if targetInstance.usbCaptureDevice == nil {
+		http.Error(w, "Capture device not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	// Close the existing capture device (stops video + audio)
+	targetInstance.usbCaptureDevice.Close()
+	targetInstance.usbCaptureDevice = nil
+
+	time.Sleep(1 * time.Second) // Short delay to ensure device is released
+
+	// Re-create and start the capture device
+	newDevice, err := usbcapture.NewInstance(targetInstance.captureConfig)
+	if err != nil {
+		http.Error(w, "Failed to re-initialize capture device: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	err = newDevice.StartVideoCapture(targetInstance.videoResoltuionConfig)
+	if err != nil {
+		newDevice.Close()
+		http.Error(w, "Failed to restart video capture: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	targetInstance.usbCaptureDevice = newDevice
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "ok",
+		"message": "Capture device reconnected",
+	})
 }

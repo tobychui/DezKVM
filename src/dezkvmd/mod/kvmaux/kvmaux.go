@@ -8,12 +8,11 @@ package kvmaux
 */
 
 import (
-	"bufio"
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/tarm/serial"
+	"imuslab.com/dezkvm/dezkvmd/mod/kvmaux/serial"
 )
 
 type USB_mass_storage_side int
@@ -33,26 +32,23 @@ type AuxMcu struct {
 	hdd_led_on bool
 
 	/* Communication */
-	port   *serial.Port
-	reader *bufio.Reader
-	mu     sync.Mutex
+	port *serial.Port
+	mu   sync.Mutex
 }
 
 // NewAuxOutbandController initializes a new AuxMcu instance
 func NewAuxOutbandController(portName string, baudRate int) (*AuxMcu, error) {
-	c := &serial.Config{
+	port, err := serial.OpenPort(&serial.Config{
 		Name:        portName,
 		Baud:        baudRate,
 		ReadTimeout: time.Second * 2,
-	}
-	port, err := serial.OpenPort(c)
+	})
 	if err != nil {
 		return nil, err
 	}
 	return &AuxMcu{
 		usb_mass_storage_side: USB_MASS_STORAGE_KVM, //Default to KVM side, defined in MCU firmware
 		port:                  port,
-		reader:                bufio.NewReader(port),
 	}, nil
 }
 
@@ -60,7 +56,10 @@ func (c *AuxMcu) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.port != nil {
-		return c.port.Close()
+		c.port.Flush()
+		err := c.port.Close()
+		c.port = nil
+		return err
 	}
 	return nil
 }
@@ -105,6 +104,26 @@ func (c *AuxMcu) ReleaseResetButton() error {
 	return c.sendCommand('d')
 }
 
+// readByte reads a single byte from the serial port directly
+func (c *AuxMcu) readByte() (byte, error) {
+	buf := make([]byte, 1)
+	_, err := c.port.ReadFull(buf)
+	if err != nil {
+		return 0, err
+	}
+	return buf[0], nil
+}
+
+// readBytes reads exactly n bytes from the serial port directly
+func (c *AuxMcu) readBytes(n int) ([]byte, error) {
+	buf := make([]byte, n)
+	_, err := c.port.ReadFull(buf)
+	if err != nil {
+		return nil, err
+	}
+	return buf, nil
+}
+
 // GetUUID requests the device UUID and returns it as a string
 // Protocol: <Length> 0x62 <UUID String>
 func (c *AuxMcu) GetUUID() (string, error) {
@@ -113,7 +132,7 @@ func (c *AuxMcu) GetUUID() (string, error) {
 	}
 
 	// Read length byte
-	lengthBuf, err := c.reader.ReadByte()
+	lengthBuf, err := c.readByte()
 	if err != nil {
 		return "", fmt.Errorf("failed to read length byte: %w", err)
 	}
@@ -121,23 +140,19 @@ func (c *AuxMcu) GetUUID() (string, error) {
 	length := int(lengthBuf)
 
 	// Read command identifier (should be 0x62)
-	cmdBuf := make([]byte, 1)
-	_, err = c.reader.Read(cmdBuf)
+	cmdBuf, err := c.readByte()
 	if err != nil {
 		return "", fmt.Errorf("failed to read command identifier: %w", err)
 	}
-	if cmdBuf[0] != 0x62 {
-		return "", fmt.Errorf("invalid command identifier: expected 0x62, got 0x%02x", cmdBuf[0])
+	if cmdBuf != 0x62 {
+		return "", fmt.Errorf("invalid command identifier: expected 0x62, got 0x%02x", cmdBuf)
 	}
 
 	// Read UUID string (length - 1 bytes, since length includes the command identifier byte)
-	uuidBuf := make([]byte, length-1)
-	_, err = c.reader.Read(uuidBuf)
+	uuidBuf, err := c.readBytes(length - 1)
 	if err != nil {
 		return "", fmt.Errorf("failed to read UUID: %w", err)
 	}
-
-	//fmt.Println("AuxMCU UUID:", string(uuidBuf), len(uuidBuf))
 
 	return string(uuidBuf), nil
 }
@@ -154,7 +169,7 @@ func (c *AuxMcu) GetUSBMassStorageSide() USB_mass_storage_side {
 	}
 
 	// Read length byte (should be 0x02)
-	lengthBuf, err := c.reader.ReadByte()
+	lengthBuf, err := c.readByte()
 	if err != nil {
 		return USB_MASS_STORAGE_UNKNOWN
 	}
@@ -163,7 +178,7 @@ func (c *AuxMcu) GetUSBMassStorageSide() USB_mass_storage_side {
 	}
 
 	// Read command identifier (should be 0x63)
-	cmdBuf, err := c.reader.ReadByte()
+	cmdBuf, err := c.readByte()
 	if err != nil {
 		return USB_MASS_STORAGE_UNKNOWN
 	}
@@ -172,7 +187,7 @@ func (c *AuxMcu) GetUSBMassStorageSide() USB_mass_storage_side {
 	}
 
 	// Read side byte (0x00=KVM, 0x01=remote)
-	sideBuf, err := c.reader.ReadByte()
+	sideBuf, err := c.readByte()
 	if err != nil {
 		return USB_MASS_STORAGE_UNKNOWN
 	}
@@ -210,7 +225,7 @@ func (c *AuxMcu) GetATXState() error {
 	}
 
 	// Read length byte (should be 0x02)
-	lengthBuf, err := c.reader.ReadByte()
+	lengthBuf, err := c.readByte()
 	if err != nil {
 		return fmt.Errorf("failed to read length byte: %w", err)
 	}
@@ -219,7 +234,7 @@ func (c *AuxMcu) GetATXState() error {
 	}
 
 	// Read command identifier (should be 0x61)
-	cmdBuf, err := c.reader.ReadByte()
+	cmdBuf, err := c.readByte()
 	if err != nil {
 		return fmt.Errorf("failed to read command identifier: %w", err)
 	}
@@ -228,7 +243,7 @@ func (c *AuxMcu) GetATXState() error {
 	}
 
 	// Read status byte
-	statusBuf, err := c.reader.ReadByte()
+	statusBuf, err := c.readByte()
 	if err != nil {
 		return fmt.Errorf("failed to read status byte: %w", err)
 	}

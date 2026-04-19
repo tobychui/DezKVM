@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
-	"imuslab.com/dezkvm/dezkvmd/mod/kvmaux"
 	"imuslab.com/dezkvm/dezkvmd/mod/usbcapture"
 )
 
@@ -30,10 +30,55 @@ the USB KVM device subtree.
 */
 type UsbKvmDevice struct {
 	UUID               string   // 16 bytes UUID obtained from AuxMCU, might change after power cycle
+	IsReady            bool     // Whether the device is ready for use (serial port and video device opened successfully)
 	USBKVMDevicePath   string   // e.g. /dev/ttyUSB0
 	AuxMCUDevicePath   string   // e.g. /dev/ttyACM0
 	CaptureDevicePaths []string // e.g. /dev/video0, /dev/video1, etc.
 	AlsaDevicePaths    []string // e.g. /dev/snd/pcmC1D0c, etc.
+}
+
+// ScannedTTYDevice represents a TTY serial device discovered during scanning,
+// along with its sniffed device category and type.
+type ScannedTTYDevice struct {
+	DevicePath string          `json:"device_path"`
+	Category   DeviceCatergory `json:"category"`
+	Type       DeviceType      `json:"type"`
+	UUID       string          `json:"uuid"` // Full UUID obtained during sniffing
+}
+
+var (
+	scannedTTYDevices []*ScannedTTYDevice
+	scannedTTYMu      sync.RWMutex
+)
+
+// GetScannedTTYDevices returns all TTY devices discovered during the last scan,
+// along with their category and type. Other modules can use this to find
+// specific device types (e.g. OLED displays) without rescanning.
+func GetScannedTTYDevices() []*ScannedTTYDevice {
+	scannedTTYMu.RLock()
+	defer scannedTTYMu.RUnlock()
+	copy := make([]*ScannedTTYDevice, len(scannedTTYDevices))
+	for i, d := range scannedTTYDevices {
+		cloned := *d
+		copy[i] = &cloned
+	}
+	return copy
+}
+
+// GetScannedTTYDevicesByCategory returns all scanned TTY devices matching
+// the given category. For example, pass DeviceCatergoryDisplay to get
+// all OLED display devices.
+func GetScannedTTYDevicesByCategory(cat DeviceCatergory) []*ScannedTTYDevice {
+	scannedTTYMu.RLock()
+	defer scannedTTYMu.RUnlock()
+	var result []*ScannedTTYDevice
+	for _, d := range scannedTTYDevices {
+		if d.Category == cat {
+			cloned := *d
+			result = append(result, &cloned)
+		}
+	}
+	return result
 }
 
 // ScanConnectedUsbKvmDevices scans and lists all connected USB KVM devices in the system.
@@ -69,28 +114,6 @@ func ScanConnectedUsbKvmDevices() ([]*UsbKvmDeviceOption, error) {
 		result = append(result, option)
 	}
 	return result, nil
-}
-
-// populateUsbKvmUUID tries to get the UUID from the AuxMCU device
-func populateUsbKvmUUID(dev *UsbKvmDevice) error {
-	if dev.AuxMCUDevicePath == "" {
-		return nil
-	}
-
-	// The standard baudrate for AuxMCU is 115200
-	aux, err := kvmaux.NewAuxOutbandController(dev.AuxMCUDevicePath, 115200)
-	if err != nil {
-		return err
-	}
-	defer aux.Close()
-
-	uuid, err := aux.GetUUID()
-	if err != nil {
-		return err
-	}
-
-	dev.UUID = uuid
-	return nil
 }
 
 func DiscoverUsbKvmSubtree() ([]*UsbKvmDevice, error) {
@@ -156,6 +179,33 @@ func DiscoverUsbKvmSubtree() ([]*UsbKvmDevice, error) {
 	}
 	hubs := make(map[string]*hubGroup)
 
+	// Sniff all ACM devices to determine their category and type,
+	// and populate the scanned TTY device cache
+	var newScannedDevices []*ScannedTTYDevice
+	acmCategories := make(map[string]*ScannedTTYDevice) // path -> sniffed info
+	for _, t := range ttys {
+		if strings.Contains(t.path, "ACM") {
+			cat, devType, uuid, err := sniffDeviceType(t.path)
+			if err != nil {
+				log.Printf("Warning: could not sniff device type for %s: %v", t.path, err)
+			} else {
+				sniffed := &ScannedTTYDevice{
+					DevicePath: t.path,
+					Category:   cat,
+					Type:       devType,
+					UUID:       uuid,
+				}
+				newScannedDevices = append(newScannedDevices, sniffed)
+				acmCategories[t.path] = sniffed
+			}
+		}
+	}
+
+	// Update the global scanned device cache
+	scannedTTYMu.Lock()
+	scannedTTYDevices = newScannedDevices
+	scannedTTYMu.Unlock()
+
 	for _, t := range ttys {
 		hub := getHub(t.sysPath)
 		if hub != "" {
@@ -163,7 +213,12 @@ func DiscoverUsbKvmSubtree() ([]*UsbKvmDevice, error) {
 				hubs[hub] = &hubGroup{}
 			}
 			if strings.Contains(t.path, "ACM") {
-				hubs[hub].acms = append(hubs[hub].acms, t.path)
+				// Only include ACM devices that are identified as KVM port category
+				if sniffed, ok := acmCategories[t.path]; ok && sniffed.Category == DeviceCatergoryKVMPort {
+					hubs[hub].acms = append(hubs[hub].acms, t.path)
+				} else {
+					log.Printf("Skipping non-KVM ACM device %s (category: %v)", t.path, acmCategories[t.path])
+				}
 			} else {
 				hubs[hub].ttys = append(hubs[hub].ttys, t.path)
 			}
@@ -210,11 +265,15 @@ func DiscoverUsbKvmSubtree() ([]*UsbKvmDevice, error) {
 		}
 	}
 
-	// Populate UUIDs
+	// Populate UUIDs from sniffed data (avoids reopening serial ports)
 	for _, dev := range result {
-		err := populateUsbKvmUUID(dev)
-		if err != nil {
-			log.Printf("Warning: could not get UUID for AuxMCU %s: %v, is this a third party device?", dev.AuxMCUDevicePath, err)
+		if dev.AuxMCUDevicePath != "" {
+			if sniffed, ok := acmCategories[dev.AuxMCUDevicePath]; ok && sniffed.UUID != "" {
+				dev.UUID = sniffed.UUID
+				dev.IsReady = true
+			} else {
+				log.Printf("Warning: no UUID available for AuxMCU %s, is this a third party device?", dev.AuxMCUDevicePath)
+			}
 		}
 	}
 

@@ -2,10 +2,10 @@ package kvmhid
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/gorilla/websocket"
 )
@@ -19,6 +19,13 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+// hidACKReply is the JSON structure sent back to the client when a command
+// with a "rid" field has been processed.
+type hidACKReply struct {
+	Rid    string `json:"rid"`
+	Status string `json:"status"` // "ok" or "error"
+}
+
 // HIDWebSocketHandler handles incoming WebSocket connections for HID commands
 func (c *Controller) HIDWebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -27,48 +34,79 @@ func (c *Controller) HIDWebSocketHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	defer conn.Close()
+
+	// Synchronize websocket writes (consumer ACKs vs. any future server pushes)
+	var wsMu sync.Mutex
+
+	// Bounded command queue:
+	// When full, the oldest command is dropped so new events are not
+	// blocked behind stale ones (e.g. when the remote machine reboots
+	// and serial sends start timing out).
+	const maxQueueSize = 10
+	cmdQueue := make(chan *HIDCommand, maxQueueSize)
+	done := make(chan struct{})
+
+	// Consumer goroutine: sends commands to the HID serial device
+	go func() {
+		defer close(done)
+		for cmd := range cmdQueue {
+			_, err := c.ConstructAndSendCmd(cmd)
+
+			// If the client requested an ACK (rid is set), send a reply
+			if cmd.Rid != "" {
+				status := "ok"
+				if err != nil {
+					status = "error"
+				}
+				ack := hidACKReply{Rid: cmd.Rid, Status: status}
+				wsMu.Lock()
+				writeErr := conn.WriteJSON(ack)
+				wsMu.Unlock()
+				if writeErr != nil {
+					log.Println("Error writing ACK:", writeErr)
+				}
+			} else if err != nil {
+				log.Println("Error sending HID command:", err)
+			}
+		}
+	}()
+
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("Error reading message:", err)
+			if !strings.Contains(err.Error(), "close") {
+				log.Println("Error reading message:", err)
+			}
 			break
 		}
 
-		//Try parsing the message as a HIDCommand
 		var hidCmd HIDCommand
 		if err := json.Unmarshal(message, &hidCmd); err != nil {
 			log.Println("Error parsing message:", err)
 			continue
 		}
 
-		bytes, err := c.ConstructAndSendCmd(&hidCmd)
-		if err != nil {
-			errmsg := map[string]string{"error": err.Error()}
-			if err := conn.WriteJSON(errmsg); err != nil {
-				// Check for broken pipe error to handle closed websocket
-				if err != nil && strings.Contains(err.Error(), "broken pipe") {
-					log.Println("WebSocket connection closed (broken pipe), cleaning up")
-					break
-				}
-				log.Println("Error writing message:", err)
-				continue
-			}
-			log.Println("Error sending command:", err)
+		// Record activity for mouse jiggler idle detection
+		c.RecordActivity()
+
+		// Commands with rid must not be dropped — they expect an ACK.
+		// Send them directly to the queue (blocking if full).
+		if hidCmd.Rid != "" {
+			cmdQueue <- &hidCmd
 			continue
 		}
 
-		prettyBytes := ""
-		for _, b := range bytes {
-			prettyBytes += fmt.Sprintf("0x%02X ", b)
+		// Fire-and-forget: try to enqueue; if full, drop the oldest event first
+		select {
+		case cmdQueue <- &hidCmd:
+		default:
+			// Queue full — discard the oldest pending command
+			<-cmdQueue
+			cmdQueue <- &hidCmd
 		}
-		if err := conn.WriteMessage(websocket.TextMessage, []byte(prettyBytes)); err != nil {
-			if strings.Contains(err.Error(), "broken pipe") {
-				log.Println("WebSocket connection closed (broken pipe), cleaning up")
-				break
-			}
-			log.Println("Error writing message:", err)
-			continue
-		}
-
 	}
+
+	// WebSocket closed — drain queue and wait for consumer to finish
+	close(cmdQueue)
+	<-done
 }

@@ -256,7 +256,9 @@ func (c *Controller) ConstructAndSendCmd(HIDCommand *HIDCommand) ([]byte, error)
 			yMSB := byte((HIDCommand.MouseAbsY >> 8) & 0xFF) // Extract MSB of Y
 			return c.MouseMoveAbsolute(xLSB, xMSB, yLSB, yMSB)
 		} else if HIDCommand.MouseRelX != 0 || HIDCommand.MouseRelY != 0 {
-			//Todo
+			dx := int8(HIDCommand.MouseRelX)
+			dy := int8(HIDCommand.MouseRelY)
+			return c.MouseMoveRelative(uint8(dx), uint8(dy), 0)
 		}
 		return []byte{}, nil
 	case EventTypeMousePress:
