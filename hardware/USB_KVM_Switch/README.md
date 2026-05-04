@@ -137,9 +137,9 @@ u - Return the UUID in DezKVM LTV data structure
 
 ## IMPORTANT NOTES
 
-**When you switch the KVM from Host 1 to Host 2, the control MCU get switched as well. **
+**When you switch the KVM from Host 1 to Host 2, the control MCU get switched as well.**
 
-**So if you are switching from Host 1 to Host 2 but Host 2 doesn't connects to anything, you will need to manually press the switch button to switch it back to Host 1. **
+**So if you are switching from Host 1 to Host 2 but Host 2 doesn't connects to anything, you will need to manually press the switch button to switch it back to Host 1.**
 
 **That means you need to make sure both hosts are online before switching OR you are physically present in front of the switch / computer for switching. DO NOT USE THIS IN FULL REMOTE IP-KVM USE CASE WHEN YOU HAVE NO EASY PHYSICAL ACCESS TO THE SWITCH** 
 
