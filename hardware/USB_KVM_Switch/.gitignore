@@ -1,0 +1,47 @@
+# Build outputs
+/apps/switchapp
+/apps/*.exe
+/apps/build/
+/dist/
+
+# Go
+go.sum
+vendor/
+*.mod
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+
+# OS
+Thumbs.db
+.DS_Store
+*.log
+*.out
+
+# Inventor / 3D Design (Autodesk)
+*.ipj
+*.ipt
+*.iam
+*.lck
+lockfile.lck
+3D models/OldVersions/
+
+# Platform-specific build artifacts
+/apps/switchapp.exe
+/apps/switchapp.app
+/apps/switchapp
+
+# Settings (may contain local configuration)
+apps/settings.json
+
+# Temporary files
+*.tmp
+*.bak

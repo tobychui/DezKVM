@@ -41,3 +41,5 @@ src/dezkvmd/config/sys.db
 src/dezkvmd/dezkvmd
 /hardware/OLED_hmi_pcb/firmware/oled_driver/.vscode
 /hardware/OLED_hmi_pcb/firmware/oled_driver/eeprom_writer/tmp
+hardware/USB_KVM_Switch/apps/internal/icon/2goarray
+/hardware/USB_KVM_Switch/apps/cmd

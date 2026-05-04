@@ -1,0 +1,1 @@
+.\make_icon.bat icon.ico
