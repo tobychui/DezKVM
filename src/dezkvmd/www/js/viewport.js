@@ -80,7 +80,38 @@ $(document).ready(function() {
 
 
 /* Mass Storage Switch */
-function switchMassStorageToRemote(){
+
+/* Tell every open tool that the USB drive changed hands.
+
+   The File Transfer window keeps a directory listing that becomes invalid the
+   moment the drive is handed to the remote computer, so it has to be told
+   rather than left showing files it can no longer read. The switch can be
+   started from the viewport toolbar, the Virtual USB tool or the settings
+   overlay, so the notification lives here -- in the two functions all three
+   of them call. */
+function notifyStorageSideChanged(){
+    var frame = document.getElementById('fileManagerFrame');
+    if(frame && frame.contentWindow){
+        frame.contentWindow.postMessage({ type: 'dezkvm-storage-side-changed' }, '*');
+    }
+    if(typeof vuRefreshState === 'function'){
+        vuRefreshState();
+    }
+}
+
+/* The File Transfer tool runs in an iframe and has no access to the aux-MCU
+   helpers, so it asks this window to perform the switch on its behalf. */
+window.addEventListener('message', function(evt){
+    var d = evt.data;
+    if(!d || d.type !== 'dezkvm-request-storage-side') return;
+    if(d.side === 'kvm'){
+        switchMassStorageToKvm();
+    }else if(d.side === 'remote'){
+        switchMassStorageToRemote();
+    }
+});
+
+function switchMassStorageToRemote(callback=undefined){
     $.cjax({
         url: massStorageSwitchURL,
         type: 'POST',
@@ -92,14 +123,23 @@ function switchMassStorageToRemote(){
             if (response.error) {
                 alert('Error switching Mass Storage to Remote: ' + response.error);
             }
+            notifyStorageSideChanged();
+            if (callback) {
+                callback(response);
+            }
+
         },
         error: function(xhr, status, error) {
             alert('Error switching Mass Storage to Remote: ' + error);
+            notifyStorageSideChanged();
+            if (callback) {
+                callback({ error: error });
+            }
         }
     });
 }
 
-function switchMassStorageToKvm(){
+function switchMassStorageToKvm(callback=undefined){
     $.cjax({
         url: massStorageSwitchURL,
         type: 'POST',
@@ -111,9 +151,19 @@ function switchMassStorageToKvm(){
             if (response.error) {
                 alert('Error switching Mass Storage to KVM: ' + response.error);
             }
+            notifyStorageSideChanged();
+            if (callback) {
+                callback(response);
+            }
+
         },
         error: function(xhr, status, error) {
             alert('Error switching Mass Storage to KVM: ' + error);
+            notifyStorageSideChanged();
+            if (callback) {
+                callback({ error: error });
+            }
+
         }
     });
 }
@@ -399,8 +449,12 @@ function reconnectStreams() {
         // Restart HID WebSocket
         startHidWebSocket();
 
-        // Change the img src to force reload
-        $("#" + streamingContainerId).attr('src', $("#" + streamingContainerId).attr('src') + "?t=" + Date.now());
+        // MJPEG only: cache-bust the img src to force reload (WebRTC mode
+        // is fully restarted by setStreamingSource above)
+        var capEl = document.getElementById(streamingContainerId);
+        if (capEl && capEl.tagName === 'IMG') {
+            capEl.src = capEl.src + "?t=" + Date.now();
+        }
         
         // Audio will be restarted when user clicks on the video (with current quality setting)
         console.log('Streams reconnected');
@@ -468,8 +522,11 @@ function autoResumeSession(width, height, fps) {
         // Restart HID WebSocket
         startHidWebSocket();
 
-        // Change the img src to force reload
-        $("#remoteCapture").attr('src', $("#remoteCapture").attr('src') + "?t=" + Date.now());
+        // MJPEG only: cache-bust the img src to force reload
+        var capEl2 = document.getElementById('remoteCapture');
+        if (capEl2 && capEl2.tagName === 'IMG') {
+            capEl2.src = capEl2.src + "?t=" + Date.now();
+        }
         
         // Restart audio WebSocket with current quality (if not disabled)
         if (!audioFrontendStarted && currentAudioQuality !== 'disabled') {
@@ -508,5 +565,21 @@ function prepareStreamsReconnection() {
 function disconnect() {
     disconnectRemote();
     window.location.href = "no_session.html";
+}
+
+/* ---- File Manager (File Transfer tool window) ----
+   The old dedicated popup was replaced by the File Transfer tool window
+   (js/toolbox.js). These wrappers keep the legacy entry points working. */
+function openFileManagerPopup() {
+    if (typeof openFileTransferWindow === 'function') {
+        openFileTransferWindow();
+    } else {
+        console.error('toolbox.js not loaded; cannot open the file manager');
+    }
+}
+
+function closeFileManagerPopup() {
+    var win = (typeof DezWindow !== 'undefined') ? DezWindow.get('tool-file-transfer') : null;
+    if (win) win.close();
 }
 

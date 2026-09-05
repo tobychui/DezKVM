@@ -34,7 +34,8 @@ let audioFrontendStarted = false; //Audio frontend has been started
 let kvmDeviceUUID = ""; //UUID of the device being controlled
 let swapCtrlCmd = false; // Swap CTRL and CMD (Meta) keys
 let askOnPaste = true; // Prompt user when pasting
-let pausePasteCapture = false; // Used to temporarily disable paste event handling when modals are open
+let directOcrToClipboard = false; // Copy OCR results straight to the clipboard, skipping the result window
+let pauseAllKeyEvents = false; // Used to temporarily disable all key event handling when modals are open
 let keyStackingEnabled = false; // Whether key stacking mode feature is enabled
 let stackToggleKey = 'ShiftRight'; // event.code of the key that activates/deactivates key stacking (default: Right Shift)
 let keyStackingActive = false;  // Whether key stacking is currently active (keys are being stacked)
@@ -76,6 +77,19 @@ if (window.location.hash.length > 1){
             if(typeof prefs.ask_on_paste !== 'undefined'){
                 askOnPaste = prefs.ask_on_paste;
             }
+            if(typeof prefs.direct_ocr_to_clipboard !== 'undefined'){
+                directOcrToClipboard = prefs.direct_ocr_to_clipboard;
+            }
+
+            // Self-start the audio stream. The parent shell also triggers
+            // startAudioWebSocket after connecting; the double start is
+            // guarded, this covers direct loads / reloads of the viewport.
+            let storedAudioQuality = localStorage.getItem('audioQuality') || 'standard';
+            if (storedAudioQuality !== 'disabled') {
+                setTimeout(function () {
+                    if (!audioSocket) startAudioWebSocket(storedAudioQuality);
+                }, 500);
+            }
             if(typeof prefs.key_stacking_enabled !== 'undefined'){
                 keyStackingEnabled = prefs.key_stacking_enabled;
             }
@@ -94,18 +108,42 @@ if (window.location.hash.length > 1){
 }
 
 
-/* Initiate API endpoint */
+/* Initiate the video stream: MJPEG (default) or WebRTC per the stored
+   streaming_mode preference. */
 function setStreamingSource(deviceUUID) {
-    let videoStreamURL = `/api/v1/stream/${deviceUUID}/video`
-    let videoElement = document.getElementById("remoteCapture");
-    videoElement.src = videoStreamURL;
+    $.get('/api/v1/preferences/' + deviceUUID, function(prefs){
+        applyStreamingSource(deviceUUID, prefs);
+    }).fail(function(){
+        applyStreamingSource(deviceUUID, null);
+    });
 }
 
-/* Get current streaming resolution, return [width, height] */
+function applyStreamingSource(deviceUUID, prefs){
+    const useWebRTC = prefs && prefs.streaming_mode === 'webrtc'
+        && typeof startWebRTCStream === 'function'
+        && typeof RTCPeerConnection !== 'undefined';
+
+    if (useWebRTC) {
+        startWebRTCStream(deviceUUID, prefs);
+        return;
+    }
+
+    // Classic MJPEG pipeline
+    if (typeof stopWebRTCStream === 'function') {
+        stopWebRTCStream(true);
+    }
+    const el = (typeof ensureCaptureElement === 'function')
+        ? ensureCaptureElement('img')
+        : document.getElementById('remoteCapture');
+    el.src = `/api/v1/stream/${deviceUUID}/video?t=${Date.now()}`;
+}
+
+/* Get current streaming resolution, return [width, height].
+   Works for both the MJPEG <img> and the WebRTC <video> element. */
 function getCurrentStreamingResolution(){
-    const img = document.getElementById(streamingContainerId);
-    const width = img.naturalWidth || parseInt(parts[0]);
-    const height = img.naturalHeight || parseInt(parts[1]);
+    const el = document.getElementById(streamingContainerId);
+    const width = el.naturalWidth || el.videoWidth || el.clientWidth;
+    const height = el.naturalHeight || el.videoHeight || el.clientHeight;
     return [width, height];
 }
 
@@ -330,8 +368,12 @@ function handleStackToggleKeyDown(event){
         $("#keystackDisplay").hide();
         console.log('[KeyStack] Stacking mode OFF, sending combo:', keyStack.map(k => `${k.key}(${k.keycode})`));
         if (typeof $ !== 'undefined' && $.toast) {
-            var label = keyStack.map(k => k.key).join(' + ') || '(empty)';
-            $.toast({ message: `Sending: ${label}`, duration: 2500 });
+            if (keyStack.length > 0) {
+                var label = keyStack.map(k => k.key).join(' + ') || '(empty)';
+                $.toast({ message: `Sending: ${label}`, duration: 2500 });
+            }else{
+                $.toast({ message: `Key stack cleared`, duration: 2500 });
+            }
         }
         if (keyStack.length > 0) {
             sendKeyStackWithAck(keyStack.slice());
@@ -368,7 +410,7 @@ function handleStackModeKeyDown(event){
         console.log(`[KeyStack] + ${event.key} (keyCode=${stackKeyCode})  stack: [${keyStack.map(k => k.key).join(', ')}]`);
 
         // Render the keystack to the display
-        let html = keyStack.map(k => `<div class="ui basic green label">${k.code}</div>`).join('');
+        let html = keyStack.map(k => `<div class="ui green label">${k.code}</div>`).join('');
         document.getElementById('keystackContent').innerHTML = html;
     }
     return;
@@ -377,6 +419,11 @@ function handleStackModeKeyDown(event){
 // handleKeyDown is the main keyboard event handler. 
 // It manages normal key sending as well as key stacking and paste prompt interception.
 function handleKeyDown(event) {
+    //Check if there are any settings / modal open, if yes don't capture paste events
+    if (pauseAllKeyEvents){
+        return;
+    }
+
     // Intercept paste (Ctrl+V / Cmd+V) when askOnPaste is enabled
     if (askOnPaste && (event.key === 'v' || event.key === 'V') && (event.ctrlKey || event.metaKey)) {
         // Not handled here, will be handled by paste event listener to show prompt
@@ -429,6 +476,11 @@ function handleKeyDown(event) {
 }
 
 function handleKeyUp(event) {
+    //Check if there are any settings / modal open, if yes don't capture paste events
+    if (pauseAllKeyEvents){
+        return;
+    }
+
     // Always swallow keyUp for the toggle key itself
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -486,7 +538,7 @@ function handleKeyUp(event) {
 
 function handlePasteEvent(event) {
     //Check if there are any settings / modal open, if yes don't capture paste events
-    if (pausePasteCapture){
+    if (pauseAllKeyEvents){
         return;
     }
 
@@ -508,18 +560,26 @@ function openPasteModal(clipText) {
     if (!clipText) {
         pastePromptSendKey();
         return;
+    }else{
+        // Since Ctrl is already held by remote side
+        // we need to release Ctrl before proceeding
+        var modKeyCode = swapCtrlCmd ? 91 : 17; // Meta or Ctrl
+        if (hidsocket && hidsocket.readyState === WebSocket.OPEN) {
+            // Modifier up
+            hidsocket.send(JSON.stringify({ event: HIDEvent.KEY_UP, keycode: modKeyCode, is_right_modifier_key: false }));
+        }
     }
 
     var modal = $('#pastePromptModal');
     modal.find('.paste-prompt-preview').html(escapedPreview || '<i>(empty clipboard)</i>');
     modal.find('.paste-prompt-sendkey-label').text('Send ' + modKey + '+V to remote');
     modal.data('clipText', clipText);
-    pausePasteCapture = true;
+    pauseAllKeyEvents = true;
 
     modal.modal({
         closable: true,
         onHidden: function() {
-            pausePasteCapture = false;
+            pauseAllKeyEvents = false;
         }
     }).modal('show');
 }
@@ -532,9 +592,16 @@ function pastePromptSendText() {
         $.toast({ message: '<i class="yellow exclamation triangle icon"></i> Clipboard is empty', duration: 3000 });
         return;
     }
-    document.getElementById('pasteTextarea').innerHTML = (clipText);
+    // Set .value (NOT .innerHTML): innerHTML parses the clipboard text as
+    // HTML (mangling entities) and stops tracking .value once the textarea
+    // is dirty, which made this path send stale/garbled characters.
+    const ta = document.getElementById('pasteTextarea');
+    ta.value = clipText.substring(0, typeof PASTE_BOX_MAX_CHARS !== 'undefined' ? PASTE_BOX_MAX_CHARS : 1000);
+    if (typeof updatePasteBoxCharCounter === 'function') {
+        updatePasteBoxCharCounter();
+    }
     setTimeout(function() {
-        //Reusing paste-box.js, sendPasteText() will do the textarea cleanup after sending the text, 
+        //Reusing paste-box.js, sendPasteText() will do the textarea cleanup after sending the text,
         // so no need to clear it here
         sendPasteText();
     }, 500);
@@ -738,6 +805,38 @@ let audioSocket = null;
 let audioContext = null;
 let audioQueue = [];
 let audioPlaying = false;
+let _audioHintShown = false;
+
+/* Resume a suspended AudioContext (browser autoplay policy). Called after
+   the context is created and again on every user interaction, since some
+   browsers only allow the resume during a user gesture. */
+function resumeAudioContext(showHint) {
+    if (!audioContext || audioContext.state !== 'suspended') return;
+    audioContext.resume().then(function () {
+        console.log('AudioContext resumed');
+        _audioHintShown = false;
+    }).catch(function () {
+        if (showHint && !_audioHintShown && typeof $ !== 'undefined' && $.toast) {
+            _audioHintShown = true;
+            $.toast({
+                message: '<i class="volume up icon"></i> Click anywhere in the session to enable remote audio',
+                duration: 6000
+            });
+        }
+    });
+}
+
+// Any interaction inside the viewport may unlock audio playback; a click is
+// also the retry path when the audio socket failed to start earlier.
+function _audioGestureKick() {
+    resumeAudioContext(false);
+    if (!audioSocket && kvmDeviceUUID) {
+        const q = localStorage.getItem('audioQuality') || 'standard';
+        if (q !== 'disabled') startAudioWebSocket(q);
+    }
+}
+document.addEventListener('click', _audioGestureKick, true);
+document.addEventListener('keydown', function () { resumeAudioContext(false); }, true);
 
 //accept low, standard, high quality audio mode
 function startAudioWebSocket(quality="standard") {
@@ -751,9 +850,14 @@ function startAudioWebSocket(quality="standard") {
 
     audioSocket.onopen = function() {
         console.log("Audio WebSocket connected");
+        audioFrontendStarted = true;
         if (!audioContext) {
             audioContext = new (window.AudioContext || window.webkitAudioContext)({sampleRate: 24000});
         }
+        // Browser autoplay policies start the context suspended unless we
+        // are inside a user-activation window. Try to resume immediately
+        // and tell the user to interact when the browser refuses.
+        resumeAudioContext(true);
     };
 
 
@@ -794,6 +898,7 @@ function startAudioWebSocket(quality="standard") {
     audioSocket.onclose = function() {
         console.log("Audio WebSocket closed");
         audioSocket = null;
+        audioFrontendStarted = false;
         audioPlaying = false;
         audioQueue = [];
         scheduledTime = 0;

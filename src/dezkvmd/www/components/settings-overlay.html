@@ -69,42 +69,55 @@
 .settings-menu-col{
     width: 200px;
     min-width: 170px;
-    background: #eaeaea;
-    border-right: 1px solid #d8d8d8;
-    padding: 1.2em;
-    padding-right: 0.6em;
+    background: var(--dez-surface-2, #f7f7f9);
+    border-right: 1px solid var(--dez-border, #e3e5e8);
+    padding: 1.2em 0.8em 1.2em 1em;
     overflow-y: auto;
+    flex-shrink: 0;
 }
 
 .settings-category-menu{
-    width: 100% !important;
-    border: none !important;
-    background: transparent !important;
-    box-shadow: none !important;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    border: none;
+    background: transparent;
+    box-shadow: none;
 }
 
 .settings-category-menu .item{
-    border-radius: 6px !important;
-    margin-bottom: 2px !important;
-    padding: 0.75em 1em !important;
-    font-size: 0.92em !important;
-    color: #444 !important;
-    transition: background 0.15s !important;
+    display: flex;
+    align-items: center;
+    gap: 0.55em;
+    width: 100%;
+    border-radius: 8px;
+    margin-bottom: 2px;
+    padding: 0.7em 0.9em;
+    font-size: 0.92em;
+    color: var(--dez-setting-catergory-menu-item-text);
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+    user-select: none;
+    transition: background 0.15s;
 }
 
 .settings-category-menu .item:hover{
-    background: rgba(0,0,0,0.06) !important;
+    background: rgba(0,0,0,0.06);
 }
 
 .settings-category-menu .item.active{
-    background: rgba(33,133,208,0.14) !important;
-    color: #1a69a4 !important;
-    font-weight: 600 !important;
+    background: var(--dez-accent-soft, #e8f0fe);
+    color: var(--dez-accent, #2b6ef2);
+    font-weight: 600;
 }
 
 .settings-category-menu .item i.icon{
-    margin-right: 0.5em;
+    margin-right: 0;
     opacity: 0.7;
+    width: 1.2em;
+    text-align: center;
+    flex-shrink: 0;
 }
 
 /* Right column – content */
@@ -112,6 +125,7 @@
     flex: 1;
     padding: 1.6em 2em;
     overflow-y: auto;
+    background: var(--dez-serface-3);
 }
 
 .settings-tab-content{
@@ -135,12 +149,12 @@
     font-weight: 600;
     font-size: 0.95em;
     margin-bottom: 0.15em;
-    color: #333;
+    color: var(--dez-text-2);
 }
 
 .settings-field .field-description{
     font-size: 0.85em;
-    color: #777;
+    color: var(--dez-text-sub2);
     margin: 0 0 0.6em 0;
 }
 
@@ -160,7 +174,126 @@
 
 .settings-field .ui.checkbox label{
     font-weight: normal !important;
-    color: #555 !important;
+    color: var(--dez-text-2) !important;
+}
+
+/* Storage side label */
+.storage-side-label{
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    font-size: 0.95em;
+    font-weight: 600;
+    padding: 0.4em 0.8em;
+    border-radius: 4px;
+    background: rgba(0,0,0,0.04);
+    border: 1px solid rgba(0,0,0,0.1);
+}
+.storage-side-label.kvm-side  { color: #21ba45; border-color: #21ba45; }
+.storage-side-label.remote-side { color: #2185d0; border-color: #2185d0; }
+.storage-side-label.unknown-side { color: #767676; }
+
+/* Storage volume bar (iOS-style) */
+.storage-bar-wrapper{
+    background: #e8e8e8;
+    border-radius: 6px;
+    height: 18px;
+    overflow: hidden;
+    margin-bottom: 0.5em;
+}
+.storage-bar{
+    display: flex;
+    height: 100%;
+    transition: width 0.4s ease;
+}
+.storage-bar-segment{
+    height: 100%;
+    transition: width 0.4s ease;
+    min-width: 0;
+}
+.storage-bar-segment.binary  { background: #e07b39; }
+.storage-bar-segment.media   { background: #9b59b6; }
+.storage-bar-segment.text    { background: #2185d0; }
+.storage-bar-segment.free    { background: #dededeaa; }
+.storage-bar-legend{
+    display: flex;
+    gap: 1em;
+    font-size: 0.82em;
+    color: var(--dez-text-sub-2);
+    flex-wrap: wrap;
+    margin-bottom: 0.3em;
+}
+.legend-item{ display: flex; align-items: center; gap: 0.3em; }
+.legend-dot {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 2px;
+}
+.legend-dot.binary  { background: #e07b39; }
+.legend-dot.media   { background: #9b59b6; }
+.legend-dot.text    { background: #2185d0; }
+.legend-dot.other   { background: #dedede; border: 1px solid #bbb; }
+.storage-usage-text{
+    font-size: 0.85em;
+    color: var(--dez-text-sub2);
+    margin-top: 0.2em;
+}
+
+/* Mass-storage switcher loading overlay */
+.storage-switch-wrapper{
+    position: relative;
+    display: inline-block;
+}
+.storage-switch-overlay{
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.75);
+    border-radius: 4px;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4em;
+    font-size: 0.85em;
+    color: #555;
+    z-index: 5;
+}
+.storage-switch-overlay.active{
+    display: flex;
+}
+
+/* File manager iframe wrapper */
+.file-manager-frame-container{
+    position: relative;
+    border: 1px solid rgba(0,0,0,0.1);
+    border-radius: 6px;
+    overflow: hidden;
+    background: #fafafa;
+    margin-top: 0.5em;
+}
+.file-manager-frame-container.disabled::after{
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(245,245,245,0.88);
+    z-index: 4;
+    cursor: not-allowed;
+    border-radius: 6px;
+}
+.file-manager-frame-container.disabled .fm-disabled-msg{
+    display: flex;
+}
+.fm-disabled-msg{
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 0.5em;
+    color: #888;
+    font-size: 0.9em;
+    pointer-events: none;
 }
 
 /* Responsive: stack on small screens */
@@ -212,11 +345,17 @@
                 <a class="item" data-tab="storage">
                     <i class="hdd icon"></i> Storage
                 </a>
+                <a class="item" data-tab="atxpower">
+                    <i class="power off icon"></i> ATX Power
+                </a>
                 <a class="item" data-tab="mouse">
                     <i class="mouse icon"></i> Mouse
                 </a>
                    <a class="item" data-tab="keyboard">
                     <i class="keyboard icon"></i> Keyboard
+                </a>
+                <a class="item" data-tab="tools">
+                    <i class="wrench icon"></i> Tools
                 </a>
                 <a class="item" data-tab="session">
                     <i class="exchange alternate icon"></i> Session
@@ -241,6 +380,42 @@
                     </select>
                     <div id="resolutionLoadingIndicator" class="ui active small progress" style="display: none; margin-top: 0.8em; max-width: 320px;">
                         <div class="bar"></div>
+                    </div>
+                </div>
+
+                <div class="settings-field">
+                    <label>Streaming Mode</label>
+                    <p class="field-description">
+                        MJPEG streams raw frames (best on LAN). WebRTC re-encodes the capture to H.264
+                        — much lower bandwidth, ideal for remote sessions over the internet.
+                    </p>
+                    <select id="settingsStreamingModeSelect" class="ui fluid dropdown" onchange="onStreamingSettingChanged()">
+                        <option value="mjpeg" selected>MJPEG (default, 50 Mbps)</option>
+                        <option value="webrtc">WebRTC — H.264 (remote / low bandwidth)</option>
+                    </select>
+
+                    <!-- WebRTC-only options -->
+                    <div id="webrtcOptionsBlock" style="display:none;margin-top:1em;padding:0.9em 1em;background:var(--dez-surface-2);border:1px solid var(--dez-border);border-radius:8px;">
+                        <label style="font-size:0.85em;color:#666;display:block;margin-bottom:0.3em;">Video Encoder</label>
+                        <select id="settingsVideoEncoderSelect" class="ui fluid dropdown" onchange="onStreamingSettingChanged()">
+                            <option value="auto" selected>Auto (prefer hardware)</option>
+                        </select>
+                        <p id="videoEncoderDetail" class="field-description" style="margin:0.4em 0 0.9em;"></p>
+
+                        <label style="font-size:0.85em;color:#666;display:block;margin-bottom:0.3em;">Bitrate (compression rate)</label>
+                        <select id="settingsVideoBitrateSelect" class="ui fluid dropdown" onchange="onStreamingSettingChanged()">
+                            <option value="1000">1 Mbps — lowest bandwidth</option>
+                            <option value="2000">2 Mbps — low</option>
+                            <option value="4000" selected>4 Mbps — balanced (recommended)</option>
+                            <option value="6000">6 Mbps — high</option>
+                            <option value="8000">8 Mbps — highest quality</option>
+                        </select>
+                    </div>
+
+                    <div id="streamingApplyRow" style="display:none;margin-top:0.8em;">
+                        <button class="ui primary button" onclick="applyStreamingSettings()">
+                            <i class="check icon"></i> Apply &amp; Restart Stream
+                        </button>
                     </div>
                 </div>
 
@@ -298,18 +473,308 @@
                 </h3>
                 <div class="ui divider"></div>
 
+                <!-- iOS-style storage volume bar (hidden when USB is on remote side) -->
+                <div class="settings-field">
+                    <label>Storage Usage</label>
+                    <button class="ui mini right floated basic circular button" title="Refresh storage info" onclick="loadStorageInfo()" style="margin-top: -0.2em;">
+                        <i class="green sync icon"></i> Refresh
+                    </button>
+                
+                    <!-- Disk meta info (model, fstype, side) -->
+                    <div id="storageDiskInfo" style="display:none;margin-bottom:0.6em;font-size:0.85em;color:var(--dez-text);display:flex;flex-wrap:wrap;gap:0.4em 0.8em;align-items:center;">
+                        <span id="storageDiskModel" style="font-weight:600;"></span>
+                        <span id="storageDiskFsType" style="background:var(--dez-accent-soft);border-radius:3px;padding:0.1em 0.4em;font-family:monospace;"></span>
+                        <span id="storageDiskSideBadge"></span>
+                    </div>
+                    <!-- Shown when USB is on the remote side -->
+                    <div id="storageRemoteSideMsg" style="display:none;">
+                        <i class="ui green circle check icon"></i>
+                        <span class="">
+                            USB on remote side
+                        </span>
+                        <div class="storage-usage-text" style="margin-top:0.5em;">Volume info unavailable while storage is connected to the remote host.</div>
+                    </div>
+                    <!-- Shown when USB is on the KVM side -->
+                    <div id="storageKvmSideBar">
+                        <div class="storage-bar-wrapper">
+                            <div class="storage-bar">
+                                <div class="storage-bar-segment binary" id="storageBarBinary" style="width:0%"></div>
+                                <div class="storage-bar-segment media"  id="storageBarMedia"  style="width:0%"></div>
+                                <div class="storage-bar-segment text"   id="storageBarText"   style="width:0%"></div>
+                            </div>
+                        </div>
+                        <div class="storage-bar-legend">
+                            <span class="legend-item"><span class="legend-dot binary"></span>Executable</span>
+                            <span class="legend-item"><span class="legend-dot media"></span>Media</span>
+                            <span class="legend-item"><span class="legend-dot text"></span>Documents</span>
+                            <span class="legend-item"><span class="legend-dot other"></span>Other</span>
+                        </div>
+                        <div id="storageUsageText" class="storage-usage-text">-- of -- used</div>
+                    </div>
+                </div>
+
+                <!-- Mass Storage Mode switcher -->
                 <div class="settings-field">
                     <label>Mass Storage Mode</label>
                     <p class="field-description">Switch the USB mass-storage device between KVM-local and remote host.</p>
-                    <div class="ui buttons">
-                        <button class="ui button" id="btnSettingsStorageKvm" onclick="switchMassStorageToKvm()">
-                            <i class="hdd icon"></i> KVM
+                    <div class="storage-switch-wrapper">
+                        <div class="ui buttons">
+                            <button class="ui button" id="btnSettingsStorageKvm" onclick="switchMassStorageToKvmAndRefresh()">
+                                <i class="hdd icon"></i> KVM
+                            </button>
+                            <div class="or"></div>
+                            <button class="ui button" id="btnSettingsStorageRemote" onclick="switchMassStorageToRemoteAndRefresh()">
+                                <i class="cloud upload icon"></i> Remote
+                            </button>
+                        </div>
+                        <div class="storage-switch-overlay" id="storageSwitchOverlay">
+                            <i class="spinner loading icon"></i> Switching...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- File Manager Launch Button -->
+                <div class="settings-field">
+                    <label>File Manager</label>
+                    <p class="field-description">Browse and manage files on the USB mass storage device.</p>
+                    <button class="ui teal button" id="btnOpenFileManager" onclick="openFileManagerFromSettings()">
+                        <i class="folder open icon"></i> Open File Manager
+                    </button>
+                    <p id="fmDisabledHint" style="display:none;color:#9a6400;font-size:0.85em;margin:0.5em 0 0;">
+                    </p>
+                </div>
+
+                <div class="ui divider"></div>
+
+                <!-- Disk Format Tool -->
+                <div class="settings-field">
+                    <label>Format Disk</label>
+                    <p class="field-description">Erase and re-partition the USB mass storage device. Add up to 4 partitions; leave the size of the last partition empty to use all remaining space.</p>
+                    <div id="fmt-inputs-row" style="max-width:560px;">
+                        <table class="ui small very compact celled table" style="margin:0 0 0.6em;">
+                            <thead>
+                                <tr>
+                                    <th style="width:28px;">#</th>
+                                    <th style="width:110px;">Size (MiB)</th>
+                                    <th>Filesystem</th>
+                                    <th>Label <span style="font-weight:normal;color:#999;">(optional)</span></th>
+                                    <th style="width:36px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="fmt-part-rows"></tbody>
+                        </table>
+                        <div style="display:flex;gap:0.6em;align-items:center;flex-wrap:wrap;">
+                            <button class="ui mini basic button" id="fmtAddPartBtn" onclick="fmtAddPartitionRow()">
+                                <i class="plus icon"></i> Add Partition
+                            </button>
+                            <div style="margin-left:auto;display:flex;gap:0.6em;align-items:center;">
+                                <label style="font-size:0.85em;color:#666;">Partition table</label>
+                                <select id="fmtPartTableSelect" class="ui compact dropdown">
+                                    <option value="" selected>Auto</option>
+                                    <option value="msdos">MBR (msdos)</option>
+                                    <option value="gpt">GPT</option>
+                                </select>
+                                <button class="ui basic blue button" onclick="showFormatPreview()" style="white-space:nowrap;">
+                                    <i class="search icon"></i> Preview &amp; Format
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Format inline panel: preview → progress → error (lives inside the settings pane) -->
+                <div id="fmt-inline-panel" style="display:none;margin-top:0.8em;">
+                    <div style="border:1px solid #e0e0e0;border-radius:6px;overflow:hidden;background:#fff;">
+                        <!-- Panel header -->
+                        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.6em 1em;background:#f4f4f4;border-bottom:1px solid #e0e0e0;">
+                            <strong id="fmt-panel-title" style="font-size:0.93em;"><i class="hdd icon"></i> Format Disk – Preview</strong>
+                            <button class="ui mini basic icon button" id="fmt-panel-close-btn" onclick="closeFmtPanel()" title="Cancel" style="margin:0;padding:0.25em 0.45em;">
+                                <i class="close icon" style="margin:0;"></i>
+                            </button>
+                        </div>
+                        <div style="padding:1em 1.2em;">
+                            <!-- Preview state -->
+                            <div id="fmt-state-preview">
+                                <div class="ui warning message" style="margin-bottom:1em;padding:0.65em 1em;font-size:0.9em;">
+                                    <i class="warning sign icon"></i>
+                                    <strong>All data on the disk will be permanently erased.</strong>
+                                    This action cannot be undone.
+                                </div>
+                                <div id="fmtPreviewContent">
+                                    <div class="ui active centered inline loader" style="margin:1em 0;"></div>
+                                </div>
+                                <div style="display:flex;gap:0.5em;justify-content:flex-end;margin-top:1em;">
+                                    <button class="ui basic button" onclick="closeFmtPanel()">Cancel</button>
+                                    <button class="ui red button" id="btnConfirmFormat" onclick="_fmtConfirm()">
+                                        <i class="trash icon"></i> Confirm &amp; Format
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Progress state -->
+                            <div id="fmt-state-progress" style="display:none;text-align:center;padding:1.5em 0;">
+                                <div class="ui active centered inline loader" style="margin-bottom:1em;"></div>
+                                <p style="margin:0.4em 0 0.25em;font-weight:600;">Formatting the disk…</p>
+                                <p style="color:#888;font-size:0.88em;margin:0;">Please wait. Do not navigate away or switch the storage side.</p>
+                            </div>
+                            <!-- Error state -->
+                            <div id="fmt-state-error" style="display:none;">
+                                <div style="display:flex;align-items:flex-start;gap:0.75em;margin-bottom:1em;">
+                                    <i class="large red times circle icon" style="margin-top:0.1em;"></i>
+                                    <div style="flex:1;">
+                                        <p style="font-weight:600;margin:0 0 0.5em;">Format failed</p>
+                                        <pre id="fmt-error-text" style="white-space:pre-wrap;word-break:break-all;background:#fef3f3;border:1px solid #e8c8c8;border-radius:4px;padding:0.75em;font-size:0.82em;color:#700;max-height:180px;overflow-y:auto;margin:0;"></pre>
+                                    </div>
+                                </div>
+                                <div style="display:flex;gap:0.5em;justify-content:flex-end;">
+                                    <button class="ui basic button" id="fmt-copy-btn" onclick="fmtCopyError()">
+                                        <i class="copy icon"></i> Copy Error
+                                    </button>
+                                    <button class="ui button" onclick="closeFmtPanel()">Close</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ui divider"></div>
+
+                <!-- ISO Write Tool -->
+                <div class="settings-field">
+                    <label>Write ISO Image</label>
+                    <p class="field-description">
+                        Write a bootable ISO/IMG from the image library onto the USB mass storage device,
+                        then switch it to the remote side to boot the installer. All data on the drive will be erased.
+                        Manage the library from the <i class="folder icon" style="margin:0;"></i> Files menu on the dashboard.
+                    </p>
+                    <div id="iso-inputs-row" style="display:flex;gap:0.6em;flex-wrap:wrap;align-items:center;max-width:560px;">
+                        <select id="isoWriteSelect" class="ui fluid dropdown" style="flex:1;min-width:200px;">
+                            <option value="">Loading image library…</option>
+                        </select>
+                        <button class="ui mini basic circular icon button" title="Refresh image list" onclick="isoLoadLibrary()">
+                            <i class="sync icon"></i>
                         </button>
-                        <div class="or"></div>
-                        <button class="ui button" id="btnSettingsStorageRemote" onclick="switchMassStorageToRemote()">
-                            <i class="cloud upload icon"></i> Remote
+                        <button class="ui basic red button" onclick="isoShowWriteConfirm()" style="white-space:nowrap;">
+                            <i class="compact disc icon"></i> Write
                         </button>
                     </div>
+
+                    <!-- ISO write inline panel: confirm → progress → done / error -->
+                    <div id="iso-inline-panel" style="display:none;margin-top:0.8em;">
+                        <div style="border:1px solid #e0e0e0;border-radius:6px;overflow:hidden;background:#fff;">
+                            <div style="display:flex;align-items:center;justify-content:space-between;padding:0.6em 1em;background:#f4f4f4;border-bottom:1px solid #e0e0e0;">
+                                <strong id="iso-panel-title" style="font-size:0.93em;"><i class="compact disc icon"></i> Write ISO Image</strong>
+                                <button class="ui mini basic icon button" id="iso-panel-close-btn" onclick="isoClosePanel()" title="Cancel" style="margin:0;padding:0.25em 0.45em;">
+                                    <i class="close icon" style="margin:0;"></i>
+                                </button>
+                            </div>
+                            <div style="padding:1em 1.2em;">
+                                <!-- Confirm state -->
+                                <div id="iso-state-confirm">
+                                    <div class="ui warning message" style="margin-bottom:1em;padding:0.65em 1em;font-size:0.9em;">
+                                        <i class="warning sign icon"></i>
+                                        <strong>All data on the disk will be permanently erased</strong>
+                                        and replaced with the image <strong id="iso-confirm-name"></strong>.
+                                    </div>
+                                    <div style="display:flex;gap:0.5em;justify-content:flex-end;">
+                                        <button class="ui basic button" onclick="isoClosePanel()">Cancel</button>
+                                        <button class="ui red button" onclick="isoStartWrite()">
+                                            <i class="bolt icon"></i> Confirm &amp; Write
+                                        </button>
+                                    </div>
+                                </div>
+                                <!-- Progress state -->
+                                <div id="iso-state-progress" style="display:none;padding:0.5em 0;">
+                                    <div class="ui small indicating progress" id="isoWriteProgressBar" style="margin-bottom:0.6em;">
+                                        <div class="bar"><div class="progress"></div></div>
+                                    </div>
+                                    <p id="iso-progress-label" style="margin:0 0 0.25em;font-weight:600;">Starting…</p>
+                                    <p style="color:#888;font-size:0.88em;margin:0;">Please wait. Do not navigate away or switch the storage side.</p>
+                                </div>
+                                <!-- Done state -->
+                                <div id="iso-state-done" style="display:none;">
+                                    <div class="ui positive message" style="display:block;margin-bottom:1em;padding:0.65em 1em;font-size:0.9em;">
+                                        <i class="check circle icon"></i>
+                                        <strong>Image written successfully.</strong>
+                                        Switch the USB drive to the <em>Remote</em> side and reboot the remote computer to boot from it.
+                                    </div>
+                                    <div style="display:flex;gap:0.5em;justify-content:flex-end;">
+                                        <button class="ui button" onclick="isoClosePanel()">Close</button>
+                                    </div>
+                                </div>
+                                <!-- Error state -->
+                                <div id="iso-state-error" style="display:none;">
+                                    <div style="display:flex;align-items:flex-start;gap:0.75em;margin-bottom:1em;">
+                                        <i class="large red times circle icon" style="margin-top:0.1em;"></i>
+                                        <div style="flex:1;">
+                                            <p style="font-weight:600;margin:0 0 0.5em;">Image write failed</p>
+                                            <pre id="iso-error-text" style="white-space:pre-wrap;word-break:break-all;background:#fef3f3;border:1px solid #e8c8c8;border-radius:4px;padding:0.75em;font-size:0.82em;color:#700;max-height:180px;overflow-y:auto;margin:0;"></pre>
+                                        </div>
+                                    </div>
+                                    <div style="display:flex;gap:0.5em;justify-content:flex-end;">
+                                        <button class="ui button" onclick="isoClosePanel()">Close</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ATX Power -->
+            <div class="settings-tab-content" data-tab="atxpower">
+                <h3 class="ui header">
+                    <i class="power off icon"></i>
+                    <div class="content">ATX Power</div>
+                </h3>
+                <div class="ui divider"></div>
+
+                <!-- Power status -->
+                <div class="settings-field">
+                    <label>Power Status</label>
+                    <button class="ui mini right floated basic circular button" title="Refresh power status" onclick="atxLoadState()" style="margin-top:-0.2em;">
+                        <i class="green sync icon"></i> Refresh
+                    </button>
+                    <p class="field-description">Front-panel LED states reported by the KVM unit.</p>
+                    <div style="display:flex;gap:1.5em;align-items:center;flex-wrap:wrap;margin-top:0.4em;">
+                        <span style="display:flex;align-items:center;gap:0.45em;">
+                            <span id="atxPowerLedDot" style="width:11px;height:11px;border-radius:50%;background:#c9c9c9;display:inline-block;box-shadow:0 0 2px rgba(0,0,0,0.25) inset;"></span>
+                            Power <span id="atxPowerLedText" style="color:#888;">unknown</span>
+                        </span>
+                        <span style="display:flex;align-items:center;gap:0.45em;">
+                            <span id="atxHddLedDot" style="width:11px;height:11px;border-radius:50%;background:#c9c9c9;display:inline-block;box-shadow:0 0 2px rgba(0,0,0,0.25) inset;"></span>
+                            HDD <span id="atxHddLedText" style="color:#888;">unknown</span>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="ui divider"></div>
+
+                <!-- Power button (short press) -->
+                <div class="settings-field">
+                    <label>Power Button</label>
+                    <p class="field-description">Short-press the power button to start the remote computer, or to request a soft shutdown from the running OS.</p>
+                    <button class="ui green basic button" id="btnAtxPowerClick" onclick="atxTrigger('power_click', this, false)">
+                        <i class="power off icon"></i> Press Power Button
+                    </button>
+                </div>
+
+                <!-- Force power off (long press) -->
+                <div class="settings-field">
+                    <label>Force Power Off</label>
+                    <p class="field-description">Hold the power button for 6 seconds to force the remote computer off. Unsaved data on the remote computer will be lost.</p>
+                    <button class="ui red basic button" id="btnAtxPowerHold" onclick="atxTrigger('power_hold', this, true)">
+                        <i class="plug icon"></i> Force Power Off
+                    </button>
+                </div>
+
+                <!-- Reset -->
+                <div class="settings-field">
+                    <label>Reset</label>
+                    <p class="field-description">Press the reset button to hard-restart the remote computer. Unsaved data on the remote computer will be lost.</p>
+                    <button class="ui orange basic button" id="btnAtxReset" onclick="atxTrigger('reset_click', this, true)">
+                        <i class="redo icon"></i> Press Reset Button
+                    </button>
                 </div>
             </div>
 
@@ -378,32 +843,6 @@
                         <i class="refresh icon"></i> Reset HID
                     </button>
                 </div>
-
-                <!-- 
-                <div class="settings-field">
-                    <label>On-Screen Keyboard</label>
-                    <p class="field-description">Show or hide the on-screen virtual keyboard.</p>
-                    <button class="ui button" onclick="toggleOnscreenKeyboard(); closeSettingsOverlay();">
-                        <i class="keyboard icon"></i> Toggle Keyboard
-                    </button>
-                </div>
-
-                <div class="settings-field">
-                    <label>Paste Text</label>
-                    <p class="field-description">Open the paste box to type text into the remote machine.</p>
-                    <button class="ui button" onclick="showPasteBox(); closeSettingsOverlay();">
-                        <i class="paste icon"></i> Open Paste Box
-                    </button>
-                </div>
-
-                <div class="settings-field">
-                    <label>OCR Copy</label>
-                    <p class="field-description">Select a region on screen and extract text using OCR.</p>
-                    <button class="ui button" onclick="showScreenshotSelector(); closeSettingsOverlay();">
-                        <i class="copy icon"></i> Copy with OCR
-                    </button>
-                </div>
-                -->
             </div>
 
             <!-- keyboard -->
@@ -427,6 +866,14 @@
                     <div class="ui toggle checkbox" id="askOnPasteCheckbox">
                         <input type="checkbox" id="chkSettingsAskOnPaste" onchange="toggleAskOnPaste()" checked>
                         <label>Enable Ask on Paste</label>
+                    </div>
+                </div>
+                <div class="settings-field">
+                    <label>Direct OCR to Clipboard</label>
+                    <p class="field-description">Copy OCR results straight to your clipboard after recognition, skipping the result window. Spaces are removed automatically for CJK languages.</p>
+                    <div class="ui toggle checkbox" id="directOcrCheckbox">
+                        <input type="checkbox" id="chkSettingsDirectOcr" onchange="toggleDirectOcrToClipboard()">
+                        <label>Enable Direct OCR to clipboard</label>
                     </div>
                 </div>
                 <div class="settings-field">
@@ -472,6 +919,27 @@
                 </div>
             </div>  
 
+            <!-- Tools -->
+            <div class="settings-tab-content" data-tab="tools">
+                <h3 class="ui header">
+                    <i class="wrench icon"></i>
+                    <div class="content">Tools</div>
+                </h3>
+                <div class="ui divider"></div>
+
+                <div class="settings-field">
+                    <label>Toolbox Arrangement</label>
+                    <p class="field-description">
+                        Choose which tools appear in the floating Tools box and the
+                        shell side panel. The preference is stored in this browser.
+                    </p>
+                    <div id="toolsArrangementList"></div>
+                    <button class="ui mini basic button" style="margin-top:0.6em;" onclick="dezToolsSettingsReset()">
+                        <i class="undo icon"></i> Reset to Default
+                    </button>
+                </div>
+            </div>
+
             <!-- Session -->
             <div class="settings-tab-content" data-tab="session">
                 <h3 class="ui header">
@@ -493,279 +961,617 @@
 </div>
 
 <script>
-(function(){
-    /* Initialize Fomantic UI checkboxes */
-    if(typeof $ !== 'undefined' && $.fn.checkbox){
-        $('#scaleToFitCheckbox').checkbox();
-        $('#showLocalCursorCheckbox').checkbox();
-        $('#invertScrollwheelCheckbox').checkbox();
-        $('#mouseJigglerCheckbox').checkbox();
-        $('#relativeMouseModeCheckbox').checkbox();
-        $('#swapCtrlCmdCheckbox').checkbox();
-        $('#askOnPasteCheckbox').checkbox();
-        $('#keyStackingCheckbox').checkbox();
+
+/* Initialize Fomantic UI checkboxes */
+if(typeof $ !== 'undefined' && $.fn.checkbox){
+    $('#scaleToFitCheckbox').checkbox();
+    $('#showLocalCursorCheckbox').checkbox();
+    $('#invertScrollwheelCheckbox').checkbox();
+    $('#mouseJigglerCheckbox').checkbox();
+    $('#relativeMouseModeCheckbox').checkbox();
+    $('#swapCtrlCmdCheckbox').checkbox();
+    $('#askOnPasteCheckbox').checkbox();
+    $('#keyStackingCheckbox').checkbox();
+}
+
+/* Scrollwheel sensitivity slider (1-10, default 2) */
+$('#scrollwheelSensitivity').slider({
+    min: 1,
+    max: 10,
+    start: 3,
+    step: 1,
+    onChange: function(value) {
+        saveCurrentPreferences(`<i class="ui green check circle icon"></i> Scrollwheel sensitivity set to ${value}`);
     }
+});
 
-    /* Scrollwheel sensitivity slider (1-10, default 2) */
-    $('#scrollwheelSensitivity').slider({
-        min: 1,
-        max: 10,
-        start: 3,
-        step: 1,
-        onChange: function(value) {
-            saveCurrentPreferences(`<i class="ui green check circle icon"></i> Scrollwheel sensitivity set to ${value}`);
-        }
-    });
-
-    /* Relative mouse sensitivity slider (1-10, default 5) */
-    $('#relativeMouseSensitivity').slider({
-        min: 1,
-        max: 10,
-        start: 5,
-        step: 1,
-        onChange: function(value) {
-            if(typeof relativeMouseSensitivity !== 'undefined'){
-                relativeMouseSensitivity = value;
-            }
-            saveCurrentPreferences(`<i class="ui green check circle icon"></i> Relative mouse sensitivity set to ${value}`);
-        }
-    });
-
-    /* Tab switching */
-    $(".settings-category-menu .item").on("click", function(){
-        $(".settings-category-menu .item").removeClass("active");
-        $(this).addClass("active");
-        var tab = $(this).data("tab");
-        $(".settings-tab-content").removeClass("active");
-        $(".settings-tab-content[data-tab='" + tab + "']").addClass("active");
-    });
-
-    /* Sync resolution dropdown from original */
-    function syncResolutionDropdown(){
-        var original = document.getElementById("resolutionSelect");
-        var mirror   = document.getElementById("settingsResolutionSelect");
-        if(!original || !mirror) return;
-        mirror.innerHTML = original.innerHTML;
-        mirror.value = original.value;
-    }
-
-    /* Sync audio dropdown from saved preference */
-    function syncAudioDropdown(){
-        var quality = localStorage.getItem("audioQuality") || "standard";
-        $("#settingsAudioQualitySelect").val(quality);
-    }
-
-    /* Sync scale-to-fit checkbox state */
-    function syncScaleToFit(){
-        var enabled = localStorage.getItem("scaleToFit") === "true";
-        var checkbox = document.getElementById("chkSettingsScaleToFit");
-        if(!checkbox) return;
-        checkbox.checked = enabled;
-        // Initialize Fomantic UI checkbox if not already initialized
-        if(typeof $ !== 'undefined' && $('#scaleToFitCheckbox').checkbox){
-            $('#scaleToFitCheckbox').checkbox(enabled ? 'check' : 'uncheck');
-        }
-    }
-
-    /* Sync show local cursor checkbox state */
-    function syncShowLocalCursor(){
-        var enabled = localStorage.getItem("showLocalCursor");
-        // Default to true if not set
-        if(enabled === null) enabled = "true";
-        enabled = enabled === "true";
-        var checkbox = document.getElementById("chkSettingshowLocalCursor");
-        if(!checkbox) return;
-        checkbox.checked = enabled;
-        // Initialize Fomantic UI checkbox if not already initialized
-        if(typeof $ !== 'undefined' && $('#showLocalCursorCheckbox').checkbox){
-            $('#showLocalCursorCheckbox').checkbox(enabled ? 'check' : 'uncheck');
-        }
-    }
-
-    /* Keep original resolution dropdown in sync when settings dropdown changes */
-    var settingsResSel = document.getElementById("settingsResolutionSelect");
-    if(settingsResSel){
-        settingsResSel.addEventListener("change", function(){
-            var orig = document.getElementById("resolutionSelect");
-            if(orig) orig.value = this.value;
-        });
-    }
-
-    /* Keep original audio dropdown in sync */
-    var settingsAudioSel = document.getElementById("settingsAudioQualitySelect");
-    if(settingsAudioSel){
-        settingsAudioSel.addEventListener("change", function(){
-            var orig = document.getElementById("audioQualitySelect");
-            if(orig) orig.value = this.value;
-        });
-    }
-
-    /* Sync invert scrollwheel checkbox state */
-    function syncInvertScrollwheel(prefs){
-        var enabled = prefs ? prefs.invert_scroll_direction : false;
-        var checkbox = document.getElementById('chkInvertScrollwheel');
-        if(!checkbox) return;
-        checkbox.checked = enabled;
-        if(typeof $ !== 'undefined' && $('#invertScrollwheelCheckbox').checkbox){
-            $('#invertScrollwheelCheckbox').checkbox(enabled ? 'check' : 'uncheck');
-        }
-    }
-
-    /* Sync mouse jiggler checkbox state */
-    function syncMouseJiggler(prefs){
-        var enabled = prefs ? prefs.enable_mouse_jiggler : false;
-        var checkbox = document.getElementById('chkMouseJiggler');
-        if(!checkbox) return;
-        checkbox.checked = enabled;
-        if(typeof $ !== 'undefined' && $('#mouseJigglerCheckbox').checkbox){
-            $('#mouseJigglerCheckbox').checkbox(enabled ? 'check' : 'uncheck');
-        }
-    }
-
-    /* Sync scrollwheel sensitivity slider */
-    function syncScrollwheelSensitivity(prefs){
-        var val = prefs ? prefs.scroll_sensitivity : 1;
-        if(!val || val < 1) val = 1;
-        if(val > 10) val = 10;
-        $('#scrollwheelSensitivity').slider('set value', val);
-    }
-
-    /* Sync relative mouse mode checkbox */
-    function syncRelativeMouseMode(prefs){
-        var enabled = prefs ? prefs.enable_relative_mouse_mode : false;
-        var checkbox = document.getElementById('chkSettingsRelativeMouseMode');
-        if(!checkbox) return;
-        checkbox.checked = enabled;
-        if(typeof mouseMoveAbsolute !== 'undefined'){
-            mouseMoveAbsolute = !enabled;
-        }
-        if(typeof $ !== 'undefined' && $('#relativeMouseModeCheckbox').checkbox){
-            $('#relativeMouseModeCheckbox').checkbox(enabled ? 'check' : 'uncheck');
-        }
-        // On session resume, if relative mode is active, prompt user to click viewport
-        if(enabled && !document.pointerLockElement){
-            //if(typeof $ !== 'undefined' && $.toast){
-            //    $.toast({
-            //        message: '<i class="mouse pointer icon"></i> Relative mouse mode is active. Click the viewport to capture the cursor.',
-            //        duration: 5000
-            //    });
-            //}
-        }
-    }
-
-    /* Sync relative mouse sensitivity slider */
-    function syncRelativeMouseSensitivity(prefs){
-        var val = prefs ? prefs.relative_mouse_sensitivity : 5;
-        if(!val || val < 1) val = 1;
-        if(val > 10) val = 10;
-        $('#relativeMouseSensitivity').slider('set value', val);
+/* Relative mouse sensitivity slider (1-10, default 5) */
+$('#relativeMouseSensitivity').slider({
+    min: 1,
+    max: 10,
+    start: 5,
+    step: 1,
+    onChange: function(value) {
         if(typeof relativeMouseSensitivity !== 'undefined'){
-            relativeMouseSensitivity = val;
+            relativeMouseSensitivity = value;
         }
+        saveCurrentPreferences(`<i class="ui green check circle icon"></i> Relative mouse sensitivity set to ${value}`);
+    }
+});
+
+/* Tab switching */
+$(".settings-category-menu .item").on("click", function(){
+    $(".settings-category-menu .item").removeClass("active");
+    $(this).addClass("active");
+    var tab = $(this).data("tab");
+    $(".settings-tab-content").removeClass("active");
+    $(".settings-tab-content[data-tab='" + tab + "']").addClass("active");
+
+    // Refresh the ATX LED states whenever the ATX Power tab is opened
+    if(tab === 'atxpower' && typeof atxLoadState === 'function'){
+        atxLoadState();
     }
 
-    /* Sync swap CTRL-CMD checkbox */
-    function syncSwapCtrlCmd(prefs){
-        var enabled = prefs ? prefs.swap_ctrl_cmd : false;
-        var checkbox = document.getElementById('chkSettingsSwapCtrlCmd');
-        if(!checkbox) return;
-        checkbox.checked = enabled;
-        if(typeof swapCtrlCmd !== 'undefined'){
-            swapCtrlCmd = enabled;
-        }
-        if(typeof $ !== 'undefined' && $('#swapCtrlCmdCheckbox').checkbox){
-            $('#swapCtrlCmdCheckbox').checkbox(enabled ? 'check' : 'uncheck');
-        }
+    // Rebuild the tool arrangement list when the Tools tab is opened
+    if(tab === 'tools' && typeof dezToolsSettingsRender === 'function'){
+        dezToolsSettingsRender();
     }
+});
 
-    /* Sync ask on paste checkbox */
-    function syncAskOnPaste(prefs){
-        var enabled = prefs ? prefs.ask_on_paste : true;
-        var checkbox = document.getElementById('chkSettingsAskOnPaste');
-        if(!checkbox) return;
-        checkbox.checked = enabled;
-        if(typeof askOnPaste !== 'undefined'){
-            askOnPaste = enabled;
-        }
-        if(typeof $ !== 'undefined' && $('#askOnPasteCheckbox').checkbox){
-            $('#askOnPasteCheckbox').checkbox(enabled ? 'check' : 'uncheck');
-        }
-    }
+/*  Tools arrangement (which tools show in the toolbox / side panel)  */
+var DEZ_ALL_TOOLS = [
+    { id: 'screenshot',    name: 'Screenshot' },
+    { id: 'ocr-copy',      name: 'OCR Copy' },
+    { id: 'clipboard',     name: 'Clipboard (Paste Box)' },
+    { id: 'file-transfer', name: 'File Transfer' },
+    { id: 'virtual-usb',   name: 'Virtual USB' },
+    { id: 'power',         name: 'Power Control' },
+    { id: 'system-info',   name: 'System Info' },
+    { id: 'record',        name: 'Record' },
+    { id: 'settings',      name: 'Settings (toolbox shortcut)' },
+    { id: 'terminal',      name: 'Terminal' },
+    { id: 'iso-library',   name: 'ISO Library' }
+];
 
-    /* Fetch all preferences from backend and sync UI */
-    window._syncingPreferences = false;
-    function syncAllPreferences(){
-        if(!kvmDeviceUUID) return;
-        $.get('/api/v1/preferences/' + kvmDeviceUUID, function(prefs){
-            window._syncingPreferences = true;
-            syncInvertScrollwheel(prefs);
-            syncMouseJiggler(prefs);
-            syncScrollwheelSensitivity(prefs);
-            syncRelativeMouseMode(prefs);
-            syncRelativeMouseSensitivity(prefs);
-            syncSwapCtrlCmd(prefs);
-            syncAskOnPaste(prefs);
-            syncKeyStacking(prefs);
-            syncStackToggleKey(prefs);
-            window._syncingPreferences = false;
+function dezToolsSettingsGetVisible(){
+    try {
+        var stored = JSON.parse(localStorage.getItem('dezkvm.tools.visible'));
+        if(Array.isArray(stored)) return stored;
+    } catch(e){ /* default */ }
+    return DEZ_ALL_TOOLS.map(function(t){ return t.id; });
+}
+
+function dezToolsSettingsRender(){
+    var container = document.getElementById('toolsArrangementList');
+    if(!container) return;
+    var visible = dezToolsSettingsGetVisible();
+    container.innerHTML = '';
+    DEZ_ALL_TOOLS.forEach(function(tool){
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.5em 0.2em;border-bottom:1px solid var(--dez-border);';
+        var label = document.createElement('span');
+        label.textContent = tool.name;
+        var toggle = document.createElement('div');
+        toggle.className = 'ui toggle checkbox';
+        var input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = visible.includes(tool.id);
+        input.addEventListener('change', function(){
+            var current = dezToolsSettingsGetVisible();
+            if(input.checked && !current.includes(tool.id)){
+                current.push(tool.id);
+            } else if(!input.checked){
+                current = current.filter(function(id){ return id !== tool.id; });
+            }
+            localStorage.setItem('dezkvm.tools.visible', JSON.stringify(current));
         });
+        toggle.appendChild(input);
+        row.appendChild(label);
+        row.appendChild(toggle);
+        container.appendChild(row);
+    });
+}
+
+function dezToolsSettingsReset(){
+    localStorage.removeItem('dezkvm.tools.visible');
+    dezToolsSettingsRender();
+    $.toast({ message: '<i class="green check icon"></i> Tool arrangement reset to default', duration: 3000 });
+}
+
+/* Sync resolution dropdown from original */
+function syncResolutionDropdown(){
+    var original = document.getElementById("resolutionSelect");
+    var mirror   = document.getElementById("settingsResolutionSelect");
+    if(!original || !mirror) return;
+    mirror.innerHTML = original.innerHTML;
+    mirror.value = original.value;
+}
+
+/* Sync audio dropdown from saved preference */
+function syncAudioDropdown(){
+    var quality = localStorage.getItem("audioQuality") || "standard";
+    $("#settingsAudioQualitySelect").val(quality);
+}
+
+/* Sync scale-to-fit checkbox state */
+function syncScaleToFit(){
+    var enabled = localStorage.getItem("scaleToFit") === "true";
+    var checkbox = document.getElementById("chkSettingsScaleToFit");
+    if(!checkbox) return;
+    checkbox.checked = enabled;
+    // Initialize Fomantic UI checkbox if not already initialized
+    if(typeof $ !== 'undefined' && $('#scaleToFitCheckbox').checkbox){
+        $('#scaleToFitCheckbox').checkbox(enabled ? 'check' : 'uncheck');
+    }
+}
+
+/* Sync show local cursor checkbox state */
+function syncShowLocalCursor(){
+    var enabled = localStorage.getItem("showLocalCursor");
+    // Default to true if not set
+    if(enabled === null) enabled = "true";
+    enabled = enabled === "true";
+    var checkbox = document.getElementById("chkSettingshowLocalCursor");
+    if(!checkbox) return;
+    checkbox.checked = enabled;
+    // Initialize Fomantic UI checkbox if not already initialized
+    if(typeof $ !== 'undefined' && $('#showLocalCursorCheckbox').checkbox){
+        $('#showLocalCursorCheckbox').checkbox(enabled ? 'check' : 'uncheck');
+    }
+}
+
+/* Keep original resolution dropdown in sync when settings dropdown changes */
+var settingsResSel = document.getElementById("settingsResolutionSelect");
+if(settingsResSel){
+    settingsResSel.addEventListener("change", function(){
+        var orig = document.getElementById("resolutionSelect");
+        if(orig) orig.value = this.value;
+    });
+}
+
+/* Keep original audio dropdown in sync */
+var settingsAudioSel = document.getElementById("settingsAudioQualitySelect");
+if(settingsAudioSel){
+    settingsAudioSel.addEventListener("change", function(){
+        var orig = document.getElementById("audioQualitySelect");
+        if(orig) orig.value = this.value;
+    });
+}
+
+/* Sync invert scrollwheel checkbox state */
+function syncInvertScrollwheel(prefs){
+    var enabled = prefs ? prefs.invert_scroll_direction : false;
+    var checkbox = document.getElementById('chkInvertScrollwheel');
+    if(!checkbox) return;
+    checkbox.checked = enabled;
+    if(typeof $ !== 'undefined' && $('#invertScrollwheelCheckbox').checkbox){
+        $('#invertScrollwheelCheckbox').checkbox(enabled ? 'check' : 'uncheck');
+    }
+}
+
+/* Sync mouse jiggler checkbox state */
+function syncMouseJiggler(prefs){
+    var enabled = prefs ? prefs.enable_mouse_jiggler : false;
+    var checkbox = document.getElementById('chkMouseJiggler');
+    if(!checkbox) return;
+    checkbox.checked = enabled;
+    if(typeof $ !== 'undefined' && $('#mouseJigglerCheckbox').checkbox){
+        $('#mouseJigglerCheckbox').checkbox(enabled ? 'check' : 'uncheck');
+    }
+}
+
+/* Sync scrollwheel sensitivity slider */
+function syncScrollwheelSensitivity(prefs){
+    var val = prefs ? prefs.scroll_sensitivity : 1;
+    if(!val || val < 1) val = 1;
+    if(val > 10) val = 10;
+    $('#scrollwheelSensitivity').slider('set value', val);
+}
+
+/* Sync relative mouse mode checkbox */
+function syncRelativeMouseMode(prefs){
+    var enabled = prefs ? prefs.enable_relative_mouse_mode : false;
+    var checkbox = document.getElementById('chkSettingsRelativeMouseMode');
+    if(!checkbox) return;
+    checkbox.checked = enabled;
+    if(typeof mouseMoveAbsolute !== 'undefined'){
+        mouseMoveAbsolute = !enabled;
+    }
+    if(typeof $ !== 'undefined' && $('#relativeMouseModeCheckbox').checkbox){
+        $('#relativeMouseModeCheckbox').checkbox(enabled ? 'check' : 'uncheck');
+    }
+    // On session resume, if relative mode is active, prompt user to click viewport
+    if(enabled && !document.pointerLockElement){
+        //if(typeof $ !== 'undefined' && $.toast){
+        //    $.toast({
+        //        message: '<i class="mouse pointer icon"></i> Relative mouse mode is active. Click the viewport to capture the cursor.',
+        //        duration: 5000
+        //    });
+        //}
+    }
+}
+
+/* Sync relative mouse sensitivity slider */
+function syncRelativeMouseSensitivity(prefs){
+    var val = prefs ? prefs.relative_mouse_sensitivity : 5;
+    if(!val || val < 1) val = 1;
+    if(val > 10) val = 10;
+    $('#relativeMouseSensitivity').slider('set value', val);
+    if(typeof relativeMouseSensitivity !== 'undefined'){
+        relativeMouseSensitivity = val;
+    }
+}
+
+/* Sync swap CTRL-CMD checkbox */
+function syncSwapCtrlCmd(prefs){
+    var enabled = prefs ? prefs.swap_ctrl_cmd : false;
+    var checkbox = document.getElementById('chkSettingsSwapCtrlCmd');
+    if(!checkbox) return;
+    checkbox.checked = enabled;
+    if(typeof swapCtrlCmd !== 'undefined'){
+        swapCtrlCmd = enabled;
+    }
+    if(typeof $ !== 'undefined' && $('#swapCtrlCmdCheckbox').checkbox){
+        $('#swapCtrlCmdCheckbox').checkbox(enabled ? 'check' : 'uncheck');
+    }
+}
+
+/* Sync ask on paste checkbox */
+function syncAskOnPaste(prefs){
+    var enabled = prefs ? prefs.ask_on_paste : true;
+    var checkbox = document.getElementById('chkSettingsAskOnPaste');
+    if(!checkbox) return;
+    checkbox.checked = enabled;
+    if(typeof askOnPaste !== 'undefined'){
+        askOnPaste = enabled;
+    }
+    if(typeof $ !== 'undefined' && $('#askOnPasteCheckbox').checkbox){
+        $('#askOnPasteCheckbox').checkbox(enabled ? 'check' : 'uncheck');
+    }
+}
+
+/*  Streaming mode (MJPEG / WebRTC) settings  */
+var _webrtcEncodersLoaded = false;
+
+/* Populate the encoder dropdown from the backend probe results */
+function loadWebRTCEncoders(){
+    if(_webrtcEncodersLoaded) return;
+    $.get('/api/v1/webrtc/encoders', function(list){
+        if(!Array.isArray(list)) return;
+        _webrtcEncodersLoaded = true;
+        var sel = document.getElementById('settingsVideoEncoderSelect');
+        if(!sel) return;
+        var current = sel.value;
+        sel.innerHTML = '<option value="auto">Auto (prefer hardware)</option>';
+        list.forEach(function(enc){
+            var value = enc.backend + (enc.variant ? (':' + enc.variant) : '');
+            var opt = document.createElement('option');
+            opt.value = value;
+            opt.textContent = enc.label + (enc.available ? '' : ' — unavailable');
+            opt.disabled = !enc.available;
+            opt.dataset.detail = enc.detail || '';
+            sel.appendChild(opt);
+        });
+        // Restore previous selection when still valid
+        if(current){ sel.value = current; if(!sel.value) sel.value = 'auto'; }
+        updateEncoderDetailText();
+    });
+}
+
+function updateEncoderDetailText(){
+    var sel = document.getElementById('settingsVideoEncoderSelect');
+    var detail = document.getElementById('videoEncoderDetail');
+    if(!sel || !detail) return;
+    var opt = sel.options[sel.selectedIndex];
+    detail.textContent = (opt && opt.dataset.detail) ? opt.dataset.detail : '';
+}
+
+/* Sync the streaming controls from the stored preferences */
+function syncStreamingSettings(prefs){
+    var modeSel = document.getElementById('settingsStreamingModeSelect');
+    var encSel  = document.getElementById('settingsVideoEncoderSelect');
+    var brSel   = document.getElementById('settingsVideoBitrateSelect');
+    if(!modeSel) return;
+
+    modeSel.value = (prefs && prefs.streaming_mode === 'webrtc') ? 'webrtc' : 'mjpeg';
+    if(encSel && prefs && prefs.video_encoder){
+        encSel.value = prefs.video_encoder;
+        if(!encSel.value) encSel.value = 'auto';
+    }
+    if(brSel && prefs && prefs.video_bitrate_kbps){
+        brSel.value = String(prefs.video_bitrate_kbps);
+        if(!brSel.value) brSel.value = '4000';
     }
 
-    /* Open / close helpers */
-    window.openSettingsOverlay = function(){
-        syncResolutionDropdown();
-        syncAudioDropdown();
-        syncScaleToFit();
-        syncShowLocalCursor();
-        syncAllPreferences();
-        $("#settings-overlay").addClass("visible");
-        pausePasteCapture = true;
-    };
+    document.getElementById('webrtcOptionsBlock').style.display =
+        modeSel.value === 'webrtc' ? '' : 'none';
+    document.getElementById('streamingApplyRow').style.display = 'none';
 
+    if(modeSel.value === 'webrtc') loadWebRTCEncoders();
+}
 
-    window.closeSettingsOverlay = function(){
-        $("#settings-overlay").removeClass("visible");
-        pausePasteCapture = false;
-    };
+/* Any control changed: reveal the Apply button */
+function onStreamingSettingChanged(){
+    var mode = document.getElementById('settingsStreamingModeSelect').value;
+    document.getElementById('webrtcOptionsBlock').style.display =
+        mode === 'webrtc' ? '' : 'none';
+    if(mode === 'webrtc') loadWebRTCEncoders();
+    updateEncoderDetailText();
+    document.getElementById('streamingApplyRow').style.display = '';
+}
 
-    /* Close on Escape key */
-    $(document).on("keydown.settingsOverlay", function(e){
-        if(e.key === "Escape" && $("#settings-overlay").hasClass("visible")){
-            closeSettingsOverlay();
+/* Persist the streaming preferences and restart the video pipeline */
+function applyStreamingSettings(){
+    saveCurrentPreferences('<i class="ui green check circle icon"></i> Streaming settings saved, restarting stream…');
+    document.getElementById('streamingApplyRow').style.display = 'none';
+    closeSettingsOverlay();
+    // Restart the stream with the new pipeline (reads back the saved prefs)
+    setTimeout(function(){
+        if(typeof setStreamingSource === 'function' && typeof kvmDeviceUUID !== 'undefined'){
+            setStreamingSource(kvmDeviceUUID);
+        }
+    }, 400);
+}
+
+/* Sync direct OCR to clipboard checkbox */
+function syncDirectOcrToClipboard(prefs){
+    var enabled = prefs ? !!prefs.direct_ocr_to_clipboard : false;
+    var checkbox = document.getElementById('chkSettingsDirectOcr');
+    if(!checkbox) return;
+    checkbox.checked = enabled;
+    if(typeof directOcrToClipboard !== 'undefined'){
+        directOcrToClipboard = enabled;
+    }
+    if(typeof $ !== 'undefined' && $('#directOcrCheckbox').checkbox){
+        $('#directOcrCheckbox').checkbox(enabled ? 'check' : 'uncheck');
+    }
+}
+
+/* Fetch all preferences from backend and sync UI */
+window._syncingPreferences = false;
+function syncAllPreferences(){
+    if(!kvmDeviceUUID) return;
+    $.get('/api/v1/preferences/' + kvmDeviceUUID, function(prefs){
+        window._syncingPreferences = true;
+        syncInvertScrollwheel(prefs);
+        syncMouseJiggler(prefs);
+        syncScrollwheelSensitivity(prefs);
+        syncRelativeMouseMode(prefs);
+        syncRelativeMouseSensitivity(prefs);
+        syncSwapCtrlCmd(prefs);
+        syncAskOnPaste(prefs);
+        syncDirectOcrToClipboard(prefs);
+        syncKeyStacking(prefs);
+        syncStackToggleKey(prefs);
+        syncStreamingSettings(prefs);
+        window._syncingPreferences = false;
+    });
+}
+
+/* Open / close helpers */
+/* Load storage info (volume bar / remote-side notice) and wire up the iframe */
+function loadStorageInfo(){
+    if(!kvmDeviceUUID) return;
+
+    $.get('/api/v1/instances', function(instances){
+        if(!Array.isArray(instances)) return;
+        var inst = instances.find(function(i){ return i.uuid === kvmDeviceUUID; });
+        if(!inst) return;
+        var side = inst.usb_mass_storage_side; // 0=unknown, 1=kvm, 2=remote
+        var isRemote = (side === 2);
+
+        // Toggle bar vs remote notice
+        $('#storageRemoteSideMsg').toggle(isRemote);
+        $('#storageKvmSideBar').toggle(!isRemote);
+
+        // Active state on mode-switcher buttons
+        $('#btnSettingsStorageKvm').toggleClass('active', !isRemote && side === 1);
+        $('#btnSettingsStorageRemote').toggleClass('active', isRemote);
+
+        // Disable file manager when USB is on the remote side or when the
+        // drive has no browsable filesystem (e.g. wiped, or unknown format)
+        var browsable = !!inst.storage_browsable;
+        var fmReason = '';
+        if(isRemote){
+            fmReason = 'File manager is unavailable while the USB drive is connected to the remote computer.';
+        } else if(!browsable){
+            fmReason = 'File manager is unavailable: the USB drive has no browsable filesystem. Format the drive to use it.';
+        }
+        setFileManagerDisabled(isRemote || !browsable, fmReason);
+
+        // Disk info row – always show side badge; populate model/fstype when available
+        var sideBadge = isRemote
+            ? '<span class="storage-side-label remote-side" style="padding:0.1em 0.5em;font-size:0.9em;"><i class="cloud upload icon"></i> Remote Side</span>'
+            : '<span class="storage-side-label kvm-side"   style="padding:0.1em 0.5em;font-size:0.9em;"><i class="hdd icon"></i> KVM Side</span>';
+        $('#storageDiskSideBadge').html(sideBadge);
+        if(inst.storage_device){
+            $('#storageDiskModel').text(inst.storage_device);
+            $('#storageDiskInfo').css('display', 'flex');
+        }else{
+            if (inst.storage_uuid != ""){
+                $("#storageDiskModel").text("Partition ID: " + inst.storage_uuid);
+            }else{
+                $("#storageDiskModel").text("Unknown File System");
+            }
+            
+        }
+
+        // Load volume data only when on KVM side
+        if(!isRemote){
+            $.get('/api/v1/storage/' + kvmDeviceUUID + '/volume', function(info){
+                if(!info || !info.total_bytes) return;
+                var total  = info.total_bytes;
+                var cats   = info.categories || {};
+                var binary = cats.binary_bytes || 0;
+                var media  = cats.media_bytes  || 0;
+                var text   = cats.text_bytes   || 0;
+                function pct(v){ return total > 0 ? Math.min(100, (v / total * 100).toFixed(1)) : 0; }
+                $('#storageBarBinary').css('width', pct(binary) + '%');
+                $('#storageBarMedia').css('width',  pct(media)  + '%');
+                $('#storageBarText').css('width',   pct(text)   + '%');
+                function fmt(b){
+                    if(b >= 1073741824) return (b/1073741824).toFixed(1) + ' GB';
+                    if(b >= 1048576)    return (b/1048576).toFixed(1)    + ' MB';
+                    return (b/1024).toFixed(0) + ' KB';
+                }
+                $('#storageUsageText').text(fmt(info.used_bytes) + ' of ' + fmt(total) + ' used');
+                // Populate model name (prefer disk_model from volume response)
+                if(info.disk_model){
+                    $('#storageDiskModel').text(info.disk_model);
+                    $('#storageDiskInfo').css('display', 'flex');
+                }
+                if(info.fs_type){
+                    var fsDisplay = {'vfat':'FAT32','exfat':'exFAT','ntfs':'NTFS','ext4':'ext4','ext3':'ext3','ext2':'ext2','btrfs':'Btrfs','xfs':'XFS'};
+                    $('#storageDiskFsType').text(fsDisplay[info.fs_type] || info.fs_type);
+                }
+            }).fail(function(){
+                $('#storageUsageText').text('Volume info unavailable');
+            });
         }
     });
 
-    /* One-time setup: pointer lock handlers for relative mouse mode */
-    (function initPointerLockHandlers(){
-        var captureEleId = (typeof cursorCaptureElementId !== 'undefined') ? cursorCaptureElementId : 'remoteCapture';
-        var captureEle = document.getElementById(captureEleId);
-        if(!captureEle) return;
+    // --- File manager iframe (only present while the File Transfer tool
+    //     window is open) ---
+    var frame = document.getElementById('fileManagerFrame');
+    if(frame && kvmDeviceUUID){
+        var expected = '/tools/file-transfer.html?uuid=' + encodeURIComponent(kvmDeviceUUID);
+        if((frame.getAttribute('src') || '').indexOf(expected) !== 0){
+            frame.src = expected;
+        }
+    }
 
-        // Click to re-acquire pointer lock when in relative mode
-        captureEle.addEventListener('click', function(event){
-            if(typeof mouseMoveAbsolute === 'undefined' || mouseMoveAbsolute) return;
-            event.preventDefault();
-            captureEle.focus();
-            if(!document.pointerLockElement){
-                captureEle.requestPointerLock();
-            }
-        });
+    // --- ISO write dropdown ---
+    if(typeof isoLoadLibrary === 'function'){
+        isoLoadLibrary();
+    }
+}
 
-        // Pointer lock state changes fire on document (per spec)
-        document.addEventListener('pointerlockchange', function(){
-            if(typeof mouseMoveAbsolute === 'undefined' || mouseMoveAbsolute) return;
-            if(!document.pointerLockElement){
-                // Lock was released (e.g. Escape) while relative mode is still active
-                if(typeof $ !== 'undefined' && $.toast){
-                    $.toast({
-                        message: '<i class="mouse pointer icon"></i> Mouse released',
-                        duration: 4000
-                    });
-                }
+/* Show/hide the switcher loading overlay and disable both buttons */
+function setStorageSwitching(on){
+    var overlay = document.getElementById('storageSwitchOverlay');
+    var btnKvm  = document.getElementById('btnSettingsStorageKvm');
+    var btnRem  = document.getElementById('btnSettingsStorageRemote');
+    if(overlay) overlay.classList.toggle('active', on);
+    if(btnKvm)  btnKvm.disabled  = on;
+    if(btnRem)  btnRem.disabled  = on;
+}
+
+/* Enable/disable the file manager (launch button + popup iframe) */
+window._fmDisabledReason = '';
+function setFileManagerDisabled(disabled, reason){
+    window._fmDisabledReason = disabled ? (reason || 'File manager is unavailable.') : '';
+
+    // Launch button in the Storage tab
+    var btn = document.getElementById('btnOpenFileManager');
+    if(btn){
+        btn.classList.toggle('disabled', disabled);
+        btn.title = window._fmDisabledReason;
+    }
+    var hint = document.getElementById('fmDisabledHint');
+    if(hint){
+        hint.textContent = window._fmDisabledReason;
+        hint.style.display = disabled ? 'block' : 'none';
+    }
+
+    // Legacy inline container (when present) + popup iframe
+    var container = document.getElementById('fileManagerContainer');
+    if(container) container.classList.toggle('disabled', disabled);
+    var frame = document.getElementById('fileManagerFrame');
+    if(frame) frame.style.pointerEvents = disabled ? 'none' : '';
+}
+
+/* Reload storage info after side switch */
+window.switchMassStorageToKvmAndRefresh = function(){
+    setStorageSwitching(true);
+    switchMassStorageToKvm(function(){
+        setStorageSwitching(false);
+        loadStorageInfo();
+    });
+};
+window.switchMassStorageToRemoteAndRefresh = function(){
+    setStorageSwitching(true);
+    switchMassStorageToRemote(function(){
+        setStorageSwitching(false);
+        loadStorageInfo();
+    });
+};
+
+/* Load storage data when the storage tab is clicked */
+var _origTabClick = null;
+var tabItems = document.querySelectorAll('.settings-category-menu .item');
+tabItems.forEach(function(item){
+    item.addEventListener('click', function(){
+        if($(this).data('tab') === 'storage'){
+            loadStorageInfo();
+        }
+    });
+});
+
+window.openSettingsOverlay = function(){
+    syncResolutionDropdown();
+    syncAudioDropdown();
+    syncScaleToFit();
+    syncShowLocalCursor();
+    syncAllPreferences();
+    loadStorageInfo();
+    $("#settings-overlay").addClass("visible");
+    pauseAllKeyEvents = true;
+};
+
+/* Open the settings overlay directly on a given tab (used by the shell's
+   side panel). Falls back to the current tab when the name is unknown. */
+window.openSettingsOverlayTab = function(tab){
+    openSettingsOverlay();
+    var menuItem = $(".settings-category-menu .item[data-tab='" + tab + "']");
+    if(menuItem.length){
+        menuItem.trigger("click");
+    }
+};
+
+
+window.closeSettingsOverlay = function(){
+    $("#settings-overlay").removeClass("visible");
+    pauseAllKeyEvents = false;
+};
+
+/* Close on Escape key */
+$(document).on("keydown.settingsOverlay", function(e){
+    if(e.key === "Escape" && $("#settings-overlay").hasClass("visible")){
+        closeSettingsOverlay();
+    }
+});
+
+/* One-time setup: pointer lock handlers for relative mouse mode */
+function initPointerLockHandlers(){
+    var captureEleId = (typeof cursorCaptureElementId !== 'undefined') ? cursorCaptureElementId : 'remoteCapture';
+    var captureEle = document.getElementById(captureEleId);
+    if(!captureEle) return;
+
+    // Click to re-acquire pointer lock when in relative mode
+    captureEle.addEventListener('click', function(event){
+        if(typeof mouseMoveAbsolute === 'undefined' || mouseMoveAbsolute) return;
+        event.preventDefault();
+        captureEle.focus();
+        if(!document.pointerLockElement){
+            captureEle.requestPointerLock();
+        }
+    });
+
+    // Pointer lock state changes fire on document (per spec)
+    document.addEventListener('pointerlockchange', function(){
+        if(typeof mouseMoveAbsolute === 'undefined' || mouseMoveAbsolute) return;
+        if(!document.pointerLockElement){
+            // Lock was released (e.g. Escape) while relative mode is still active
+            if(typeof $ !== 'undefined' && $.toast){
+                $.toast({
+                    message: '<i class="mouse pointer icon"></i> Mouse released',
+                    duration: 4000
+                });
             }
-        });
-    })();
-})();
+        }
+    });
+};
+
 
 /* 
     Scale to Fit Functionality 
@@ -786,6 +1592,16 @@ function toggleScaleToFit() {
         removeScaleToFit();
         console.log('Actual Resolution mode enabled');
     }
+}
+
+function externalToggleScaleToFit(){
+    // Toggle from external elements outside of this viewport
+    // Flip the checkbox and toggle scaleToFit
+    var checkbox = document.getElementById("chkSettingsScaleToFit");
+    checkbox.checked = !checkbox.checked;
+    setTimeout(function(){
+        toggleScaleToFit();
+    }, 100);
 }
 
 function applyScaleToFit() {
@@ -960,6 +1776,16 @@ function toggleAskOnPaste() {
     console.log('Ask on paste:', enabled);
 }
 
+function toggleDirectOcrToClipboard() {
+    var checkbox = document.getElementById('chkSettingsDirectOcr');
+    var enabled = checkbox ? checkbox.checked : false;
+    if(typeof directOcrToClipboard !== 'undefined'){
+        directOcrToClipboard = enabled;
+    }
+    saveCurrentPreferences(`<i class="ui green check circle icon"></i> Direct OCR to clipboard ${enabled ? 'enabled' : 'disabled'}`);
+    console.log('Direct OCR to clipboard:', enabled);
+}
+
 /*
     Key Stacking Functionality
 */
@@ -1020,8 +1846,13 @@ function saveCurrentPreferences(succmessg = `<i class="ui green check circle ico
         relative_mouse_sensitivity: parseInt($('#relativeMouseSensitivity').slider('get value')) || 5,
         swap_ctrl_cmd: document.getElementById('chkSettingsSwapCtrlCmd') ? document.getElementById('chkSettingsSwapCtrlCmd').checked : false,
         ask_on_paste: document.getElementById('chkSettingsAskOnPaste') ? document.getElementById('chkSettingsAskOnPaste').checked : true,
+        direct_ocr_to_clipboard: document.getElementById('chkSettingsDirectOcr') ? document.getElementById('chkSettingsDirectOcr').checked : false,
         key_stacking_enabled: document.getElementById('chkSettingsKeyStacking') ? document.getElementById('chkSettingsKeyStacking').checked : false,
-        stack_toggle_key: document.getElementById('settingsStackToggleKeySelect') ? document.getElementById('settingsStackToggleKeySelect').value : 'ShiftRight'
+        stack_toggle_key: document.getElementById('settingsStackToggleKeySelect') ? document.getElementById('settingsStackToggleKeySelect').value : 'ShiftRight',
+        streaming_mode: document.getElementById('settingsStreamingModeSelect') ? document.getElementById('settingsStreamingModeSelect').value : 'mjpeg',
+        video_encoder: document.getElementById('settingsVideoEncoderSelect') ? document.getElementById('settingsVideoEncoderSelect').value : 'auto',
+        video_encoder_variant: '',
+        video_bitrate_kbps: document.getElementById('settingsVideoBitrateSelect') ? (parseInt(document.getElementById('settingsVideoBitrateSelect').value) || 4000) : 4000
     };
     $.ajax({
         url: '/api/v1/preferences/' + kvmDeviceUUID,
@@ -1065,4 +1896,463 @@ function reconnectV4l2Device() {
     });
 }
 
+/*  File Manager popup bridge  */
+function openFileManagerFromSettings() {
+    if (window._fmDisabledReason) {
+        $.toast({ message: '<i class="yellow warning icon"></i> ' + window._fmDisabledReason, duration: 4000 });
+        return;
+    }
+    closeSettingsOverlay();
+    if (typeof openFileManagerPopup === 'function') {
+        openFileManagerPopup();
+    } else {
+        console.error('openFileManagerPopup is not defined in viewport.js');
+    }
+}
+
+/*  Disk Format  */
+function fmtHumanSize(bytes) {
+    if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
+    if (bytes >= 1048576)    return (bytes / 1048576).toFixed(1)    + ' MB';
+    if (bytes >= 1024)       return (bytes / 1024).toFixed(0)       + ' KB';
+    return bytes + ' B';
+}
+
+/* Switch the inline format panel to a named state: 'preview', 'progress', 'error' */
+function _fmtShowState(state) {
+    ['preview', 'progress', 'error'].forEach(function(s) {
+        document.getElementById('fmt-state-' + s).style.display = (s === state) ? '' : 'none';
+    });
+    var titles = {
+        preview:  '<i class="hdd icon"></i> Format Disk \u2013 Preview',
+        progress: '<i class="hdd icon"></i> Formatting\u2026',
+        error:    '<i class="red times circle icon"></i> Format Failed'
+    };
+    document.getElementById('fmt-panel-title').innerHTML = titles[state];
+    // Hide the X button while formatting is in progress (cannot cancel mid-format)
+    document.getElementById('fmt-panel-close-btn').style.display = (state === 'progress') ? 'none' : '';
+}
+
+/* ---- Partition table editor ---- */
+var FMT_MAX_PARTITIONS = 4;
+
+var _fmtFsOptions = '<option value="fat32">FAT32 (max 4 GB/file)</option>'
+                  + '<option value="exfat" selected>exFAT (recommended)</option>'
+                  + '<option value="ext4">ext4 (Linux)</option>'
+                  + '<option value="ntfs">NTFS (Windows)</option>';
+
+function fmtAddPartitionRow() {
+    var tbody = document.getElementById('fmt-part-rows');
+    if (tbody.children.length >= FMT_MAX_PARTITIONS) {
+        $.toast({ message: '<i class="yellow warning icon"></i> Maximum ' + FMT_MAX_PARTITIONS + ' partitions', duration: 3000 });
+        return;
+    }
+    var tr = document.createElement('tr');
+    tr.className = 'fmt-part-row';
+    tr.innerHTML =
+        '<td class="fmt-part-index" style="color:#888;"></td>'
+      + '<td><input type="number" class="fmt-part-size" min="1" placeholder="Remaining" '
+      +     'style="width:100%;padding:0.35em 0.5em;border:1px solid #d4d4d5;border-radius:4px;font-size:0.9em;"></td>'
+      + '<td><select class="fmt-part-fs" style="width:100%;padding:0.35em 0.4em;border:1px solid #d4d4d5;border-radius:4px;font-size:0.9em;">'
+      +     _fmtFsOptions + '</select></td>'
+      + '<td><input type="text" class="fmt-part-label" maxlength="32" placeholder="e.g. DEZKVM" '
+      +     'style="width:100%;padding:0.35em 0.5em;border:1px solid #d4d4d5;border-radius:4px;font-size:0.9em;"></td>'
+      + '<td style="text-align:center;"><button class="ui mini basic icon button fmt-part-remove" title="Remove partition" '
+      +     'style="margin:0;padding:0.3em 0.45em;"><i class="trash icon" style="margin:0;"></i></button></td>';
+    tr.querySelector('.fmt-part-remove').addEventListener('click', function() {
+        tr.remove();
+        fmtRenumberRows();
+    });
+    tbody.appendChild(tr);
+    fmtRenumberRows();
+}
+
+/* Update row numbers and only allow the last row to leave its size empty */
+function fmtRenumberRows() {
+    var rows = document.querySelectorAll('#fmt-part-rows .fmt-part-row');
+    rows.forEach(function(row, i) {
+        row.querySelector('.fmt-part-index').textContent = (i + 1);
+        var sizeInput = row.querySelector('.fmt-part-size');
+        var isLast = (i === rows.length - 1);
+        sizeInput.placeholder = isLast ? 'Remaining' : 'Size';
+        // Single remove button stays enabled only when >1 rows exist
+        row.querySelector('.fmt-part-remove').disabled = (rows.length === 1);
+    });
+}
+
+/* Collect the partition specs from the editor rows; returns null on invalid input */
+function fmtCollectPartitions() {
+    var rows = document.querySelectorAll('#fmt-part-rows .fmt-part-row');
+    var parts = [];
+    for (var i = 0; i < rows.length; i++) {
+        var sizeStr = rows[i].querySelector('.fmt-part-size').value.trim();
+        var sizeMB = 0;
+        if (sizeStr !== '') {
+            sizeMB = parseInt(sizeStr, 10);
+            if (isNaN(sizeMB) || sizeMB < 1) {
+                $.toast({ message: '<i class="red times icon"></i> Partition ' + (i + 1) + ': invalid size', duration: 3000 });
+                return null;
+            }
+        } else if (i !== rows.length - 1) {
+            $.toast({ message: '<i class="red times icon"></i> Only the last partition may leave its size empty', duration: 4000 });
+            return null;
+        }
+        parts.push({
+            size_mb: sizeMB,
+            filesystem: rows[i].querySelector('.fmt-part-fs').value,
+            label: rows[i].querySelector('.fmt-part-label').value.trim()
+        });
+    }
+    return parts;
+}
+
+var _fmtPendingRequest = null; // JSON body shared by preview and format calls
+
+function _fmtConfirm() {
+    doFormatDisk(_fmtPendingRequest);
+}
+
+function closeFmtPanel() {
+    document.getElementById('fmt-inline-panel').style.display = 'none';
+    document.getElementById('fmt-inputs-row').style.display = '';
+}
+
+function showFormatPreview() {
+    if (!kvmDeviceUUID) {
+        $.toast({ message: '<i class="red times icon"></i> Device UUID not available', duration: 3000 });
+        return;
+    }
+    var parts = fmtCollectPartitions();
+    if (!parts || parts.length === 0) return;
+
+    _fmtPendingRequest = {
+        part_table: document.getElementById('fmtPartTableSelect').value,
+        partitions: parts
+    };
+
+    // Hide the inputs row and show the inline panel in preview state
+    document.getElementById('fmt-inputs-row').style.display = 'none';
+    document.getElementById('fmt-inline-panel').style.display = '';
+    _fmtShowState('preview');
+
+    // Seed with a spinner while the request is in flight
+    document.getElementById('fmtPreviewContent').innerHTML =
+        '<div class="ui active centered inline loader" style="margin:1em 0;"></div>';
+    document.getElementById('btnConfirmFormat').classList.remove('disabled');
+
+    var csrfToken = document.querySelector('meta[name="dezkvm.csrf.token"]')
+                    ? document.querySelector('meta[name="dezkvm.csrf.token"]').getAttribute('content') : '';
+
+    // Fetch preview from backend
+    $.ajax({
+        url: '/api/v1/storage/' + kvmDeviceUUID + '/format/preview',
+        method: 'POST',
+        contentType: 'application/json',
+        headers: { 'dezkvm_csrf_token': csrfToken },
+        data: JSON.stringify(_fmtPendingRequest),
+        success: function(preview) {
+            var html = '<table class="ui small celled table" style="margin:0;">';
+            html += '<thead><tr><th>Partition</th><th>Size</th><th>Filesystem</th><th>Label</th><th>Table</th></tr></thead>';
+            html += '<tbody>';
+            (preview.partitions || []).forEach(function(p) {
+                html += '<tr>'
+                    + '<td><code>' + p.name + '</code></td>'
+                    + '<td>' + fmtHumanSize(p.size_b) + '</td>'
+                    + '<td><strong>' + p.fstype + '</strong></td>'
+                    + '<td>' + (p.label || '<em style="color:#aaa;">none</em>') + '</td>'
+                    + '<td>' + p.part_table + '</td>'
+                    + '</tr>';
+            });
+            html += '</tbody></table>';
+            html += '<p style="margin-top:0.8em;font-size:0.88em;color:#555;">'
+                  + '<i class="hdd icon"></i> Disk: <code>' + preview.disk + '</code> &nbsp;|&nbsp; '
+                  + 'Total: ' + fmtHumanSize(preview.disk_size_b)
+                  + '</p>';
+            document.getElementById('fmtPreviewContent').innerHTML = html;
+        },
+        error: function(xhr) {
+            document.getElementById('fmtPreviewContent').innerHTML =
+                '<div class="ui error message"><i class="times icon"></i> '
+                + (xhr.responseText || 'Failed to fetch format preview') + '</div>';
+            // Disable confirm button when preview failed
+            document.getElementById('btnConfirmFormat').classList.add('disabled');
+        }
+    });
+}
+
+function doFormatDisk(requestBody) {
+    if (!kvmDeviceUUID || !requestBody) return;
+
+    _fmtShowState('progress');
+
+    var csrfToken = document.querySelector('meta[name="dezkvm.csrf.token"]')
+                    ? document.querySelector('meta[name="dezkvm.csrf.token"]').getAttribute('content') : '';
+
+    $.ajax({
+        url: '/api/v1/storage/' + kvmDeviceUUID + '/format',
+        method: 'POST',
+        contentType: 'application/json',
+        headers: { 'dezkvm_csrf_token': csrfToken },
+        data: JSON.stringify(requestBody),
+        success: function() {
+            closeFmtPanel();
+            $.toast({ message: '<i class="green check icon"></i> Disk formatted successfully', duration: 4000 });
+            if (typeof loadStorageInfo === 'function') {
+                loadStorageInfo();
+            }
+            // Tell the file manager iframe (if open) to reset to root
+            var fmFrame = document.getElementById('fileManagerFrame');
+            if (fmFrame && fmFrame.contentWindow) {
+                fmFrame.contentWindow.postMessage({ type: 'dezkvm-format-complete' }, '*');
+            }
+        },
+        error: function(xhr) {
+            var msg = (xhr.responseText || 'Unknown error').trim();
+            document.getElementById('fmt-error-text').textContent = msg;
+            _fmtShowState('error');
+        }
+    });
+}
+
+// Seed the editor with one partition spanning the whole disk
+fmtAddPartitionRow();
+
+function fmtCopyError() {
+    var text = document.getElementById('fmt-error-text').textContent || '';
+    navigator.clipboard.writeText(text).then(function() {
+        var btn = document.getElementById('fmt-copy-btn');
+        var orig = btn.innerHTML;
+        btn.innerHTML = '<i class="check icon"></i> Copied!';
+        setTimeout(function() { btn.innerHTML = orig; }, 2000);
+    }).catch(function() {
+        // Fallback for older browsers
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+    });
+}
+
+/*  ISO Write Tool  */
+var _isoStatusTimer = null;
+
+/* Switch the inline ISO panel to a named state: 'confirm', 'progress', 'done', 'error' */
+function _isoShowState(state) {
+    ['confirm', 'progress', 'done', 'error'].forEach(function(s) {
+        document.getElementById('iso-state-' + s).style.display = (s === state) ? '' : 'none';
+    });
+    var titles = {
+        confirm:  '<i class="compact disc icon"></i> Write ISO Image',
+        progress: '<i class="compact disc icon"></i> Writing Image…',
+        done:     '<i class="green check circle icon"></i> Image Written',
+        error:    '<i class="red times circle icon"></i> Image Write Failed'
+    };
+    document.getElementById('iso-panel-title').innerHTML = titles[state];
+    // Hide the X button while the write is in progress (cannot cancel mid-write)
+    document.getElementById('iso-panel-close-btn').style.display = (state === 'progress') ? 'none' : '';
+}
+
+function isoLoadLibrary() {
+    $.get('/api/v1/iso/list', function(data) {
+        var isos = (data && data.isos) || [];
+        var $sel = $('#isoWriteSelect');
+        $sel.empty();
+        if (isos.length === 0) {
+            $sel.append('<option value="">No images in library — upload via the Files menu</option>');
+            return;
+        }
+        isos.forEach(function(e) {
+            $sel.append($('<option></option>').attr('value', e.name)
+                .text(e.name + ' (' + fmtHumanSize(e.size) + ')'));
+        });
+    });
+}
+
+function isoClosePanel() {
+    if (_isoStatusTimer) {
+        clearInterval(_isoStatusTimer);
+        _isoStatusTimer = null;
+    }
+    document.getElementById('iso-inline-panel').style.display = 'none';
+    document.getElementById('iso-inputs-row').style.display = '';
+}
+
+function isoShowWriteConfirm() {
+    if (!kvmDeviceUUID) {
+        $.toast({ message: '<i class="red times icon"></i> Device UUID not available', duration: 3000 });
+        return;
+    }
+    var isoName = document.getElementById('isoWriteSelect').value;
+    if (!isoName) {
+        $.toast({ message: '<i class="yellow warning icon"></i> No image selected', duration: 3000 });
+        return;
+    }
+    document.getElementById('iso-confirm-name').textContent = isoName;
+    document.getElementById('iso-inputs-row').style.display = 'none';
+    document.getElementById('iso-inline-panel').style.display = '';
+    _isoShowState('confirm');
+}
+
+function isoStartWrite() {
+    var isoName = document.getElementById('isoWriteSelect').value;
+    if (!kvmDeviceUUID || !isoName) return;
+
+    _isoShowState('progress');
+    $('#isoWriteProgressBar').progress({ percent: 1 });
+    document.getElementById('iso-progress-label').textContent = 'Starting…';
+
+    var csrfToken = document.querySelector('meta[name="dezkvm.csrf.token"]')
+                    ? document.querySelector('meta[name="dezkvm.csrf.token"]').getAttribute('content') : '';
+
+    $.ajax({
+        url: '/api/v1/storage/' + kvmDeviceUUID + '/isowrite',
+        method: 'POST',
+        contentType: 'application/json',
+        headers: { 'dezkvm_csrf_token': csrfToken },
+        data: JSON.stringify({ iso_name: isoName }),
+        success: function() {
+            _isoStatusTimer = setInterval(isoPollWriteStatus, 1000);
+        },
+        error: function(xhr) {
+            document.getElementById('iso-error-text').textContent = (xhr.responseText || 'Failed to start image write').trim();
+            _isoShowState('error');
+        }
+    });
+}
+
+function isoPollWriteStatus() {
+    $.get('/api/v1/storage/' + kvmDeviceUUID + '/isowrite/status', function(status) {
+        if (!status) return;
+        if (status.state === 'writing' || status.state === 'syncing' || status.state === 'verifying') {
+            var pct = status.percent >= 0 ? Math.max(1, Math.round(status.percent)) : 100;
+            var label;
+            if (status.state === 'syncing') {
+                label = 'Flushing data to the drive…';
+                pct = 100;
+            } else if (status.state === 'verifying') {
+                label = 'Verifying: ' + fmtHumanSize(status.verified_b)
+                      + ' of ' + fmtHumanSize(status.written_b) + ' checked';
+            } else {
+                label = fmtHumanSize(status.written_b)
+                      + (status.total_b > 0 ? ' of ' + fmtHumanSize(status.total_b) : '')
+                      + ' written'
+                      + (status.speed_bps ? ' – ' + fmtHumanSize(status.speed_bps) + '/s' : '');
+            }
+            $('#isoWriteProgressBar').progress({ percent: pct });
+            document.getElementById('iso-progress-label').textContent = label;
+        } else if (status.state === 'done') {
+            clearInterval(_isoStatusTimer);
+            _isoStatusTimer = null;
+            _isoShowState('done');
+            if (typeof loadStorageInfo === 'function') {
+                loadStorageInfo();
+            }
+        } else if (status.state === 'error') {
+            clearInterval(_isoStatusTimer);
+            _isoStatusTimer = null;
+            document.getElementById('iso-error-text').textContent = status.message || 'Unknown error';
+            _isoShowState('error');
+        }
+    });
+}
+
+/*  ATX Power Control  */
+
+/* Update one LED indicator (dot + text) */
+function _atxSetLed(dotId, textId, on) {
+    var dot  = document.getElementById(dotId);
+    var text = document.getElementById(textId);
+    if (!dot || !text) return;
+    if (on === null) {
+        dot.style.background = '#c9c9c9';
+        text.textContent = 'unknown';
+        text.style.color = '#888';
+    } else if (on) {
+        dot.style.background = '#21ba45';
+        dot.style.boxShadow = '0 0 4px #21ba45';
+        text.textContent = 'on';
+        text.style.color = '#21ba45';
+    } else {
+        dot.style.background = '#c9c9c9';
+        dot.style.boxShadow = '0 0 2px rgba(0,0,0,0.25) inset';
+        text.textContent = 'off';
+        text.style.color = '#888';
+    }
+}
+
+function atxLoadState() {
+    if (!kvmDeviceUUID) return;
+    $.get('/api/v1/atx/' + kvmDeviceUUID + '/state', function(state) {
+        _atxSetLed('atxPowerLedDot', 'atxPowerLedText', !!state.power_led);
+        _atxSetLed('atxHddLedDot', 'atxHddLedText', !!state.hdd_led);
+    }).fail(function() {
+        _atxSetLed('atxPowerLedDot', 'atxPowerLedText', null);
+        _atxSetLed('atxHddLedDot', 'atxHddLedText', null);
+    });
+}
+
+/* Two-step confirmation state for destructive ATX actions */
+var _atxArmTimers = {};
+
+/* Trigger an ATX action. Destructive actions (needConfirm) require a second
+   click on the same button within 4 seconds. */
+function atxTrigger(action, btn, needConfirm) {
+    if (!kvmDeviceUUID) {
+        $.toast({ message: '<i class="red times icon"></i> Device UUID not available', duration: 3000 });
+        return;
+    }
+
+    // Arm-then-confirm for destructive actions
+    if (needConfirm && !btn.dataset.armed) {
+        btn.dataset.armed = '1';
+        btn.dataset.origHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="warning icon"></i> Click again to confirm';
+        _atxArmTimers[action] = setTimeout(function() {
+            delete btn.dataset.armed;
+            btn.innerHTML = btn.dataset.origHtml;
+        }, 4000);
+        return;
+    }
+    if (needConfirm) {
+        clearTimeout(_atxArmTimers[action]);
+        delete btn.dataset.armed;
+        btn.innerHTML = btn.dataset.origHtml;
+    }
+
+    var csrfToken = document.querySelector('meta[name="dezkvm.csrf.token"]')
+                    ? document.querySelector('meta[name="dezkvm.csrf.token"]').getAttribute('content') : '';
+
+    // The request blocks for the press duration (up to 6 s for power_hold)
+    btn.classList.add('loading', 'disabled');
+    $.ajax({
+        url: '/api/v1/atx/' + kvmDeviceUUID + '/trigger',
+        method: 'POST',
+        contentType: 'application/json',
+        headers: { 'dezkvm_csrf_token': csrfToken },
+        data: JSON.stringify({ action: action }),
+        success: function() {
+            btn.classList.remove('loading', 'disabled');
+            var messages = {
+                power_click: 'Power button pressed',
+                power_hold:  'Power button held for 6 seconds',
+                reset_click: 'Reset button pressed'
+            };
+            $.toast({ message: '<i class="green check icon"></i> ' + (messages[action] || 'Done'), duration: 3500 });
+            // LED states need a moment to settle after a power event
+            setTimeout(atxLoadState, 1500);
+        },
+        error: function(xhr) {
+            btn.classList.remove('loading', 'disabled');
+            $.toast({
+                class: 'error',
+                message: '<i class="red times icon"></i> ATX action failed: ' + (xhr.responseText || 'Unknown error'),
+                duration: 5000
+            });
+        }
+    });
+}
 </script>

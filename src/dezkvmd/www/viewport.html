@@ -8,8 +8,10 @@
     <meta name="dezkvm.csrf.token" content="{{.csrfToken}}">
     <title>Streaming | DezKVM</title>
     <script src="js/jquery-3.7.1.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/semantic.min.css" integrity="sha512-ySrYzxj+EI1e9xj/kRYqeDL5l1wW0IWY8pzHNTIZ+vc1D3Z14UDNPbwup4yOUmlRemYjgUXsUZ/xvCQU2ThEAw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/semantic.min.js" integrity="sha512-Y/wIVu+S+XJsDL7I+nL50kAVFLMqSdvuLqF2vMoRqiMkmvcqFjEpEgeu6Rx8tpZXKp77J8OUpMKy0m3jLYhbbw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/components/icon.min.css" integrity="sha512-TWRDyIVIf+vAIJPt6vRyjyJLwZJizD8OGF3x9ZKsGNW6DejvY+1B9x+aN86SND5ziDzbei41I+LfaZpF59j1aA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="css/dez-ui.css">
+    <link rel="stylesheet" href="css/toolbox.css">
+    <script src="js/dez-ui.js"></script>
     <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
     <link rel="stylesheet" href="viewport.css">
     <link rel="icon" type="image/png" href="/favicon.png">
@@ -19,7 +21,11 @@
         <img id="remoteCapture" src="" oncontextmenu="return false;"></img>
         <!-- <video id="remoteCapture" src="" oncontextmenu="return false;"></video> -->
     </div>
-   <div id="menu">
+   <!-- Legacy in-viewport menu. Hidden in the new shell UI (the top bar and
+        the floating Tools box replace it) but kept in the DOM because the
+        settings overlay mirrors the hidden #resolutionSelect /
+        #audioQualitySelect elements. -->
+   <div id="menu" style="display:none;">
         <div id="advance-menu">
             <button class="ui mini icon button" id="btnStorageKvm" onclick="switchMassStorageToKvm()" title="Switch Storage to KVM">
                 <i class="hdd icon"></i>
@@ -75,7 +81,7 @@
 
     <!-- Onscreen Keyboard -->
     <div id="onscreenKeyboard" class="onscreen-keyboard" style="display: none;"></div>
-   
+
     <!-- Settings -->
     <div id="settings-overlay" class="tools-window"></div>
 
@@ -105,8 +111,8 @@
 
     <!-- Key Stack Display -->
     <div id="keystackDisplay" style="display:none;">
-        <button class="ui mini red icon button" onclick="clearKeyStack()" title="Clear Key Stack">
-            <i class="close icon"></i>
+        <button class="ui mini black icon button" onclick="clearKeyStack()" title="Clear Key Stack">
+            <i class="red close icon"></i>
         </button>
         <div id="keystackContent" style="display:inline-block; margin-left: 0.4em;">
             <!-- keystack overview will show here -->
@@ -114,15 +120,17 @@
     </div>
 
     <script src="js/viewport.js"></script>
+    <script src="js/webrtc-stream.js"></script>
     <script src="js/kvmevt.js"></script>
     <script src="js/ocr-copy.js"></script>
+    <script src="js/toolbox.js"></script>
     <script>
         $("#onscreenKeyboard").load("components/on-screen-keyboard.html", function() {
             console.log("On-Screen Keyboard component loaded.");
         });
 
-        $("#pasteBox").load("components/paste-box.html", function() {
-            console.log("Paste Box component loaded.");
+        $("#pasteBox").load("tools/clipboard.html", function() {
+            console.log("Clipboard (paste box) tool loaded.");
         });
 
         $("#settings-overlay").load("components/settings-overlay.html", function() {

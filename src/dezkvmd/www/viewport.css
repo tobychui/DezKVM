@@ -8,6 +8,9 @@
     interface for remote desktop like interaction.
 
 */
+body{
+    margin: 0 !important; /* workaround for some browser adding margin to body by defualt */
+}
 #menu {
     height: auto; /* allow dynamic height */
     overflow: visible;
@@ -114,27 +117,16 @@
     z-index: 1000;
 }
 
-/* Paste Box Styles */
+/* Paste Box Styles
+   #pasteBox is only a hidden parking container: the content is moved into a
+   draggable DezWindow by showPasteBox() (paste-box.js). */
 .paste-box-container {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background-color: rgba(0, 0, 0, 0.7);
-    z-index: 2000;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    display: none !important;
 }
 
 .paste-box-content {
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-    width: 90%;
-    max-width: 600px;
-    max-height: 80vh;
+    background: transparent;
+    width: 100%;
     display: flex;
     flex-direction: column;
 }
@@ -563,5 +555,76 @@ body.dark-theme .keyboard-row-function {
     
     .key-space {
         min-width: 10em;
+    }
+}
+
+/* ---- File Manager Popup ---- */
+.file-manager-popup {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: min(92vw, 900px);
+    height: min(88vh, 700px);
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+    z-index: 1800;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #d8d8d8;
+}
+
+.fm-popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6em 1em;
+    background: #f5f5f5;
+    border-bottom: 1px solid #e0e0e0;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    cursor: move;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.fm-popup-title {
+    font-weight: 600;
+    font-size: 0.95em;
+    color: #333;
+}
+
+.fm-popup-title .icon {
+    color: #e0a020;
+}
+
+.fm-popup-close {
+    margin: 0 !important;
+    background: #e0e0e0 !important;
+    color: #333 !important;
+    flex-shrink: 0;
+}
+
+.fm-popup-close:hover {
+    background: #d0d0d0 !important;
+}
+
+.fm-popup-body {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+@media (max-width: 600px) {
+    .file-manager-popup {
+        width: 100vw;
+        height: 100vh;
+        top: 0;
+        left: 0;
+        transform: none;
+        border-radius: 0;
     }
 }
