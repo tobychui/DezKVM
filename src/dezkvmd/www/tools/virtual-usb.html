@@ -1,0 +1,186 @@
+<!--
+    tools/virtual-usb.html
+    Virtual USB tool panel — switches the KVM unit's mass-storage drive
+    between the KVM host and the remote computer. Ajax-loaded into a
+    DezWindow inside viewport.html; uses viewport globals (kvmDeviceUUID,
+    switchMassStorageToKvm/Remote, notifyStorageSideChanged, $, $.toast).
+
+    The panel is built around one physical fact: the drive can only ever be
+    plugged into one of the two ends. The switch below is therefore a single
+    two-position control showing where the drive is right now, not a pair of
+    independent buttons.
+-->
+<div class="dez-tool-panel" id="tool-virtual-usb">
+    <p class="tool-desc">
+        The USB drive can only be plugged into one end at a time. Attach it to
+        the KVM to manage files and write images, or to the remote computer so
+        it appears there as a USB stick.
+    </p>
+
+    <!-- Two-position switch -->
+    <div class="vu-switch" id="vu-switch">
+        <div class="vu-track">
+            <span class="vu-thumb" id="vu-thumb"></span>
+            <button class="vu-opt" id="vu-opt-kvm" onclick="vuSwitch('kvm')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="2.5" y="6" width="19" height="12" rx="2"/>
+                    <path d="M6 15h.01M9.5 15h.01"/>
+                </svg>
+                <span>KVM Side</span>
+            </button>
+            <button class="vu-opt" id="vu-opt-remote" onclick="vuSwitch('remote')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="2.5" y="4" width="19" height="13" rx="2"/>
+                    <path d="M8 21h8M12 17v4"/>
+                </svg>
+                <span>Remote Side</span>
+            </button>
+        </div>
+        <div class="vu-hint" id="vu-hint">…</div>
+    </div>
+
+    <div class="tool-status-card">
+        <div class="tool-kv"><span class="k">Attached to</span><span class="v" id="vu-side">…</span></div>
+        <div class="tool-kv"><span class="k">Device</span><span class="v" id="vu-device">…</span></div>
+        <div class="tool-kv"><span class="k">Storage UUID</span><span class="v" id="vu-uuid">…</span></div>
+        <div class="tool-kv"><span class="k">Browsable from KVM</span><span class="v" id="vu-browsable">…</span></div>
+    </div>
+
+    <div class="tool-row">
+        <button class="ui button" id="vu-btn-files" onclick="vuOpenFiles()" style="flex:1;">
+            <i class="folder open icon"></i> Open File Transfer
+        </button>
+    </div>
+
+    <p class="tool-desc" style="margin:0;">
+        Switching takes a few seconds while the drive is flushed, unmounted and
+        re-enumerated on the other side. Do not switch while a transfer is running.
+    </p>
+</div>
+
+<style>
+#tool-virtual-usb .vu-switch { margin-bottom: 1em; }
+#tool-virtual-usb .vu-track {
+    position: relative;
+    display: flex;
+    padding: 3px;
+    border-radius: 11px;
+    background: var(--dez-surface-2);
+    border: 1px solid var(--dez-border);
+}
+/* The thumb is the drive itself: it slides to whichever end holds it. */
+#tool-virtual-usb .vu-thumb {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: calc(50% - 3px);
+    border-radius: 9px;
+    background: var(--dez-surface);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.16);
+    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s;
+}
+#tool-virtual-usb .vu-track.remote .vu-thumb { transform: translateX(100%); }
+#tool-virtual-usb .vu-track.busy .vu-thumb { opacity: 0.5; }
+#tool-virtual-usb .vu-opt {
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 9px 6px;
+    border: none;
+    background: transparent;
+    border-radius: 9px;
+    color: var(--dez-text-sub);
+    font-family: var(--dez-font);
+    font-size: 0.92em;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+#tool-virtual-usb .vu-opt svg { width: 17px; height: 17px; flex-shrink: 0; }
+#tool-virtual-usb .vu-opt.active { color: var(--dez-text); }
+#tool-virtual-usb .vu-track.busy .vu-opt { cursor: progress; }
+#tool-virtual-usb .vu-opt:disabled { cursor: default; }
+#tool-virtual-usb .vu-hint {
+    margin-top: 0.6em;
+    font-size: 0.85em;
+    color: var(--dez-text-sub);
+    text-align: center;
+    min-height: 1.2em;
+}
+</style>
+
+<script>
+(function () {
+    let vuBusy = false;
+
+    window.vuRefreshState = function () {
+        $.get('/api/v1/instances', function (instances) {
+            if (!Array.isArray(instances)) return;
+            const inst = instances.find(function (i) { return i.uuid === kvmDeviceUUID; });
+            if (!inst) return;
+
+            const isRemote = inst.usb_mass_storage_side === 2;
+            const track = document.querySelector('#tool-virtual-usb .vu-track');
+            if (track) track.classList.toggle('remote', isRemote);
+
+            $('#vu-opt-kvm').toggleClass('active', !isRemote);
+            $('#vu-opt-remote').toggleClass('active', isRemote);
+
+            $('#vu-side').text(isRemote ? 'Remote computer' : 'KVM host');
+            $('#vu-device').text(inst.storage_device || 'not detected');
+            $('#vu-uuid').text(inst.storage_uuid || '—');
+            $('#vu-browsable').text(inst.storage_browsable ? 'Yes' : 'No');
+
+            if (!vuBusy) {
+                $('#vu-hint').text(isRemote
+                    ? 'The remote computer sees the drive as a plugged-in USB stick.'
+                    : (inst.storage_browsable
+                        ? 'The drive is mounted here — files can be browsed and written.'
+                        : 'The drive is on the KVM side but could not be mounted.'));
+            }
+            $('#vu-btn-files').toggleClass('disabled', isRemote || !inst.storage_browsable);
+        });
+    };
+
+    window.vuSwitch = function (side) {
+        if (vuBusy) return;
+        const track = document.querySelector('#tool-virtual-usb .vu-track');
+        // Move the thumb immediately so the control feels responsive; the
+        // refresh below corrects it if the switch fails.
+        if (track) track.classList.toggle('remote', side === 'remote');
+
+        vuBusy = true;
+        if (track) track.classList.add('busy');
+        $('#vu-opt-kvm, #vu-opt-remote').prop('disabled', true);
+        $('#vu-hint').text('Switching…');
+
+        const done = function () {
+            vuBusy = false;
+            if (track) track.classList.remove('busy');
+            $('#vu-opt-kvm, #vu-opt-remote').prop('disabled', false);
+            vuRefreshState();
+            // Keep the settings overlay storage tab in sync when it is open
+            if (typeof loadStorageInfo === 'function') loadStorageInfo();
+        };
+
+        if (side === 'kvm') {
+            switchMassStorageToKvm(done);
+        } else {
+            switchMassStorageToRemote(done);
+        }
+    };
+
+    window.vuOpenFiles = function () {
+        if (typeof openFileTransferWindow === 'function') openFileTransferWindow();
+    };
+
+    vuRefreshState();
+})();
+</script>

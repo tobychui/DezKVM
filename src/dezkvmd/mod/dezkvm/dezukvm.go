@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"imuslab.com/dezkvm/dezkvmd/mod/dezkvm/storage"
 	"imuslab.com/dezkvm/dezkvmd/mod/usbcapture"
 )
 
@@ -73,8 +74,8 @@ func (d *DezkVM) AddUsbKvmDevice(config *UsbKvmDeviceOption) error {
 
 	// Setup video config
 	videoConfig := &usbcapture.VideoConfig{
-		UseH264: true, //TODO: make it configurable later
-		Profile: "1080p",
+		UseH264:     true, //TODO: make it configurable later
+		H264Profile: "1080p",
 	}
 
 	// capture config
@@ -92,6 +93,11 @@ func (d *DezkVM) AddUsbKvmDevice(config *UsbKvmDeviceOption) error {
 		FPS:    config.CaptureeVideoFPS,
 	}
 
+	massStorageUUID := ""
+	if config.EnableMassStorage {
+		massStorageUUID = config.MassStoragePTUUID
+	}
+
 	instance := &UsbKvmDeviceInstance{
 		Config: config,
 
@@ -102,6 +108,8 @@ func (d *DezkVM) AddUsbKvmDevice(config *UsbKvmDeviceOption) error {
 		usbKVMController: nil,
 		auxMCUController: nil,
 		usbCaptureDevice: nil,
+		massStorageUUID:  massStorageUUID,
+		isoWriteJob:      storage.NewISOWriteJob(),
 		parent:           d,
 	}
 	d.UsbKvmInstance = append(d.UsbKvmInstance, instance)
@@ -121,6 +129,9 @@ func (d *DezkVM) RemoveUsbKvmDevice(uuid string) error {
 
 func (d *DezkVM) StartAllUsbKvmDevices() error {
 	for _, instance := range d.UsbKvmInstance {
+		//Debug
+		//js, _ := json.MarshalIndent(instance, "", " ")
+		//log.Println(string(js))
 		err := instance.Start()
 		if err != nil {
 			return err

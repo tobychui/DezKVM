@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="dezkvm.csrf.token" content="{{.csrfToken}}">
+    <title>ISO Library – DezKVM</title>
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/components/icon.min.css" integrity="sha512-TWRDyIVIf+vAIJPt6vRyjyJLwZJizD8OGF3x9ZKsGNW6DejvY+1B9x+aN86SND5ziDzbei41I+LfaZpF59j1aA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <link rel="stylesheet" href="/css/dez-ui.css">
+    <script src="js/jquery-3.7.1.min.js"></script>
+    <script src="/js/dez-ui.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0; padding: 0;
+            background: #f8f8f8;
+            font-family: system-ui, -apple-system, sans-serif;
+            font-size: 13px;
+            height: 100%;
+        }
+
+        /* ---- Toolbar ---- */
+        #iso-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            background: #fff;
+            border-bottom: 1px solid #e0e0e0;
+            flex-wrap: wrap;
+        }
+        #iso-toolbar .page-title {
+            font-size: 15px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+            min-width: 0;
+        }
+        #iso-space { color: #888; font-size: 12px; white-space: nowrap; }
+
+        /* ---- Drop zone ---- */
+        #iso-dropzone {
+            border: 2px dashed #ccc;
+            border-radius: 6px;
+            text-align: center;
+            padding: 12px;
+            color: #aaa;
+            font-size: 12px;
+            margin: 8px 10px 4px;
+            transition: border-color 0.2s, background 0.2s;
+            cursor: pointer;
+        }
+        #iso-dropzone.dragover {
+            border-color: #2185d0;
+            background: #edf4fc;
+            color: #2185d0;
+        }
+        #iso-fileInput, #iso-directWriteInput { display: none; }
+
+        /* ---- Upload progress ---- */
+        #iso-upload-progress { margin: 4px 10px; display: none; }
+
+        /* ---- Table ---- */
+        #iso-table-wrap { overflow-y: auto; max-height: calc(100vh - 170px); padding: 0 10px 10px; }
+        .iso-table { width: 100%; border-collapse: collapse; }
+        .iso-table thead th {
+            position: sticky; top: 0;
+            background: #f0f0f0;
+            padding: 6px 8px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 1px solid #ddd;
+            user-select: none;
+            white-space: nowrap;
+        }
+        .iso-table td { padding: 6px 8px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+        .iso-table tbody tr:hover { background: #f0f5ff; }
+        .iso-table td.iso-name { word-break: break-all; }
+        .iso-table td.iso-size, .iso-table td.iso-date { white-space: nowrap; color: #666; }
+        .iso-table td.iso-actions { white-space: nowrap; text-align: right; }
+        .iso-table td.iso-actions .ui.button { padding: 4px 8px; font-size: 11px; }
+
+        #iso-empty {
+            text-align: center;
+            padding: 40px 0;
+            color: #aaa;
+            display: none;
+        }
+
+        .ui.modal { font-size: 13px; }
+    </style>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div id="iso-toolbar">
+    <div class="page-title">
+        <i class="compact disc icon"></i> ISO / Image Library
+        <span id="iso-space"></span>
+    </div>
+    <button class="ui mini blue icon button" onclick="document.getElementById('iso-fileInput').click()">
+        <i class="upload icon"></i> Upload Image
+    </button>
+    <button class="ui mini orange icon button" title="Stream a local image straight onto a KVM USB drive without saving it to the library"
+            onclick="document.getElementById('iso-directWriteInput').click()">
+        <i class="bolt icon"></i> Direct Write…
+    </button>
+    <button class="ui mini icon button" title="Refresh" onclick="loadISOList()">
+        <i class="sync icon"></i>
+    </button>
+</div>
+
+<!-- Hidden file inputs -->
+<input type="file" id="iso-fileInput" accept=".iso,.img" multiple onchange="uploadISOs(this.files)">
+<input type="file" id="iso-directWriteInput" accept=".iso,.img" onchange="startDirectWrite(this.files)">
+
+<!-- Drag-and-drop zone -->
+<div id="iso-dropzone" onclick="document.getElementById('iso-fileInput').click()">
+    <i class="cloud upload icon"></i> Drop .iso / .img files here to add them to the library, or click to browse
+</div>
+
+<!-- Upload progress -->
+<div id="iso-upload-progress" class="ui small indicating progress">
+    <div class="bar"><div class="progress"></div></div>
+    <div class="label" id="iso-upload-label">Uploading…</div>
+</div>
+
+<!-- Image listing -->
+<div id="iso-table-wrap">
+    <table class="iso-table">
+        <thead>
+            <tr>
+                <th style="width:24px"></th>
+                <th>Name</th>
+                <th style="width:80px">Size</th>
+                <th style="width:210px"></th>
+            </tr>
+        </thead>
+        <tbody id="iso-tbody"></tbody>
+    </table>
+    <div id="iso-empty">
+        <i class="compact disc icon" style="font-size:2em;"></i>
+        <p>No images in the library yet. Upload an ISO or IMG file to get started.</p>
+    </div>
+</div>
+
+<!-- Rename Modal -->
+<div class="ui tiny modal" id="modal-iso-rename">
+    <div class="header"><i class="pencil icon"></i> Rename Image</div>
+    <div class="content">
+        <div class="ui fluid input">
+            <input type="text" id="input-iso-rename" placeholder="New name (.iso or .img)">
+        </div>
+    </div>
+    <div class="actions">
+        <div class="ui cancel button">Cancel</div>
+        <div class="ui blue approve button">Rename</div>
+    </div>
+</div>
+
+<!-- Delete Confirm Modal -->
+<div class="ui tiny modal" id="modal-iso-delete">
+    <div class="header"><i class="trash icon"></i> Confirm Delete</div>
+    <div class="content">
+        <p id="iso-delete-msg">Are you sure you want to delete this image?</p>
+    </div>
+    <div class="actions">
+        <div class="ui cancel button">Cancel</div>
+        <div class="ui red approve button">Delete</div>
+    </div>
+</div>
+
+<!-- Write-to-USB Modal -->
+<div class="ui small modal" id="modal-iso-write">
+    <div class="header"><i class="usb icon"></i> Write Image to USB Drive</div>
+    <div class="content">
+        <!-- Setup state -->
+        <div id="isow-state-setup">
+            <p>Write <strong id="isow-iso-name"></strong> <span id="isow-iso-size" style="color:#888;"></span> to the USB mass storage drive of a KVM port.</p>
+            <div class="ui form">
+                <div class="field">
+                    <label>Target KVM Port</label>
+                    <select id="isow-instance-select" class="ui fluid dropdown"></select>
+                </div>
+            </div>
+            <div class="ui warning message" style="display:block;margin-top:1em;">
+                <i class="warning sign icon"></i>
+                <strong>All data on the target USB drive will be permanently erased.</strong>
+                The drive must currently be on the KVM side. After writing, switch the drive to the
+                remote side and reboot the remote computer to boot from it.
+            </div>
+        </div>
+        <!-- Progress state -->
+        <div id="isow-state-progress" style="display:none;">
+            <p style="font-weight:600;margin-bottom:0.4em;"><i class="spinner loading icon"></i> <span id="isow-progress-title">Writing image…</span></p>
+            <div class="ui small indicating progress" id="isow-progressbar">
+                <div class="bar"><div class="progress"></div></div>
+                <div class="label" id="isow-progress-label">Starting…</div>
+            </div>
+            <p style="color:#888;font-size:0.9em;">Do not close this page, switch the storage side or power off the KVM while writing.</p>
+        </div>
+        <!-- Done state -->
+        <div id="isow-state-done" style="display:none;">
+            <div class="ui positive message" style="display:block;">
+                <i class="check circle icon"></i>
+                <strong>Image written successfully.</strong>
+                <p style="margin:0.4em 0 0;">Open the session's storage settings and switch the USB drive to the <em>Remote</em> side, then reboot the remote computer to start the installer.</p>
+            </div>
+        </div>
+        <!-- Error state -->
+        <div id="isow-state-error" style="display:none;">
+            <div class="ui negative message" style="display:block;">
+                <i class="times circle icon"></i>
+                <strong>Image write failed</strong>
+                <pre id="isow-error-text" style="white-space:pre-wrap;word-break:break-all;font-size:0.85em;margin:0.5em 0 0;"></pre>
+            </div>
+        </div>
+    </div>
+    <div class="actions">
+        <div class="ui cancel button" id="isow-cancel-btn">Close</div>
+        <div class="ui red button" id="isow-start-btn" onclick="confirmWrite()">
+            <i class="bolt icon"></i> Write Image
+        </div>
+    </div>
+</div>
+
+<script>
+(function(){
+    const CSRF_TOKEN = document.querySelector('meta[name="dezkvm.csrf.token"]')
+                         ? document.querySelector('meta[name="dezkvm.csrf.token"]').getAttribute('content')
+                         : '';
+
+    function csrfHeader(){
+        return { 'dezkvm_csrf_token': CSRF_TOKEN };
+    }
+
+    function fmtSize(bytes){
+        if(bytes == null) return '';
+        if(bytes >= 1073741824) return (bytes / 1073741824).toFixed(2) + ' GB';
+        if(bytes >= 1048576)    return (bytes / 1048576).toFixed(1)    + ' MB';
+        if(bytes >= 1024)       return (bytes / 1024).toFixed(0)       + ' KB';
+        return bytes + ' B';
+    }
+
+    function fmtDate(iso){
+        if(!iso) return '';
+        var d = new Date(iso);
+        return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    }
+
+    function escHtml(s){
+        return String(s)
+            .replace(/&/g,'&amp;')
+            .replace(/</g,'&lt;')
+            .replace(/>/g,'&gt;')
+            .replace(/"/g,'&quot;');
+    }
+
+    function toast(msg, type){
+        if(typeof $ !== 'undefined' && $.toast){
+            $.toast({ message: msg, class: type || '', duration: 4000 });
+        }
+    }
+
+    // --------------- list ---------------
+    window.loadISOList = function(){
+        $.get('/api/v1/iso/list', function(data){
+            var isos = (data && data.isos) || [];
+            renderISOs(isos);
+            if(data && data.total_b){
+                $('#iso-space').text('(' + fmtSize(data.free_b) + ' free of ' + fmtSize(data.total_b) + ' on KVM host)');
+            }
+        }).fail(function(xhr){
+            toast('<i class="red times icon"></i> Failed to load library: ' + (xhr.responseText || ''), 'error');
+        });
+    };
+
+    function renderISOs(isos){
+        var $tbody = $('#iso-tbody');
+        $tbody.empty();
+
+        isos.forEach(function(e){
+            var row = $('<tr></tr>');
+            row.append('<td><i class="compact disc violet icon"></i></td>');
+            row.append($('<td class="iso-name"></td>').text(e.name)
+                .attr('title', 'Uploaded: ' + fmtDate(e.mod_time)));
+            row.append('<td class="iso-size">' + escHtml(fmtSize(e.size)) + '</td>');
+
+            var actCell = $('<td class="iso-actions"></td>');
+
+            var writeBtn = $('<button class="ui mini orange basic icon button" title="Write to a KVM USB drive"></button>')
+                .html('<i class="usb icon"></i> Write to USB')
+                .on('click', function(){ openWriteModal(e.name, e.size); });
+            actCell.append(writeBtn);
+
+            var dlBtn = $('<a class="ui mini basic icon button" title="Download"></a>')
+                .html('<i class="download icon"></i>')
+                .attr('href', '/api/v1/iso/download?name=' + encodeURIComponent(e.name));
+            actCell.append(dlBtn);
+
+            var rnBtn = $('<button class="ui mini basic icon button" title="Rename"></button>')
+                .html('<i class="pencil icon"></i>')
+                .on('click', function(){ showRenameModal(e.name); });
+            actCell.append(rnBtn);
+
+            var delBtn = $('<button class="ui mini basic red icon button" title="Delete"></button>')
+                .html('<i class="trash icon"></i>')
+                .on('click', function(){ showDeleteModal(e.name); });
+            actCell.append(delBtn);
+
+            row.append(actCell);
+            $tbody.append(row);
+        });
+
+        document.getElementById('iso-empty').style.display = isos.length === 0 ? 'block' : 'none';
+    }
+
+    // --------------- upload to library ---------------
+    window.uploadISOs = function(fileList){
+        if(!fileList || fileList.length === 0) return;
+
+        // Client-side extension check for a friendlier error message
+        for(var i = 0; i < fileList.length; i++){
+            var n = fileList[i].name.toLowerCase();
+            if(!n.endsWith('.iso') && !n.endsWith('.img')){
+                toast('<i class="red times icon"></i> Only .iso and .img files are allowed: ' + escHtml(fileList[i].name), 'error');
+                document.getElementById('iso-fileInput').value = '';
+                return;
+            }
+        }
+
+        var formData = new FormData();
+        for(var i = 0; i < fileList.length; i++){
+            formData.append('files', fileList[i]);
+        }
+
+        var $prog = $('#iso-upload-progress');
+        $prog.show().progress({ percent: 0 });
+        $('#iso-upload-label').text('Uploading ' + fileList.length + ' file(s)…');
+
+        $.ajax({
+            url: '/api/v1/iso/upload',
+            method: 'POST',
+            headers: csrfHeader(),
+            data: formData,
+            processData: false,
+            contentType: false,
+            xhr: function(){
+                var xhr = new window.XMLHttpRequest();
+                xhr.upload.addEventListener('progress', function(evt){
+                    if(evt.lengthComputable){
+                        var pct = Math.round(evt.loaded / evt.total * 100);
+                        $prog.progress({ percent: pct });
+                        $('#iso-upload-label').text('Uploading… ' + pct + '% (' + fmtSize(evt.loaded) + ' of ' + fmtSize(evt.total) + ')');
+                    }
+                });
+                return xhr;
+            },
+            success: function(res){
+                $prog.hide();
+                toast('<i class="green check icon"></i> Uploaded ' + (res.uploaded || []).length + ' image(s)');
+                loadISOList();
+            },
+            error: function(xhr){
+                $prog.hide();
+                toast('<i class="red times icon"></i> Upload failed: ' + (xhr.responseText || ''), 'error');
+            }
+        });
+        document.getElementById('iso-fileInput').value = '';
+    };
+
+    // --------------- drag-and-drop ---------------
+    (function initDragDrop(){
+        var zone = document.getElementById('iso-dropzone');
+        zone.addEventListener('dragover', function(e){
+            e.preventDefault();
+            zone.classList.add('dragover');
+        });
+        zone.addEventListener('dragleave', function(){
+            zone.classList.remove('dragover');
+        });
+        zone.addEventListener('drop', function(e){
+            e.preventDefault();
+            zone.classList.remove('dragover');
+            uploadISOs(e.dataTransfer.files);
+        });
+    })();
+
+    // --------------- rename / delete ---------------
+    window.showRenameModal = function(name){
+        $('#input-iso-rename').val(name);
+        $('#modal-iso-rename').modal({
+            onApprove: function(){
+                var newName = $('#input-iso-rename').val().trim();
+                if(!newName || newName === name) return;
+                $.ajax({
+                    url: '/api/v1/iso/rename',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    headers: csrfHeader(),
+                    data: JSON.stringify({ name: name, new_name: newName }),
+                    success: function(){
+                        toast('<i class="green check icon"></i> Renamed');
+                        loadISOList();
+                    },
+                    error: function(xhr){
+                        toast('<i class="red times icon"></i> Rename failed: ' + (xhr.responseText || ''), 'error');
+                    }
+                });
+            }
+        }).modal('show');
+    };
+
+    window.showDeleteModal = function(name){
+        $('#iso-delete-msg').text('Delete image "' + name + '"? This cannot be undone.');
+        $('#modal-iso-delete').modal({
+            onApprove: function(){
+                $.ajax({
+                    url: '/api/v1/iso/delete?name=' + encodeURIComponent(name),
+                    method: 'DELETE',
+                    headers: csrfHeader(),
+                    success: function(){
+                        toast('<i class="green check icon"></i> Deleted');
+                        loadISOList();
+                    },
+                    error: function(xhr){
+                        toast('<i class="red times icon"></i> Delete failed: ' + (xhr.responseText || ''), 'error');
+                    }
+                });
+            }
+        }).modal('show');
+    };
+
+    // --------------- write to USB ---------------
+    var _writeIsoName = null;   // library image name; null in direct-write mode
+    var _writeLocalFile = null; // File object for direct-write mode
+    var _writeStatusTimer = null;
+
+    function _isowShowState(state){
+        ['setup', 'progress', 'done', 'error'].forEach(function(s){
+            document.getElementById('isow-state-' + s).style.display = (s === state) ? '' : 'none';
+        });
+        // Buttons: start only in setup; block closing while writing
+        $('#isow-start-btn').toggle(state === 'setup');
+        $('#isow-cancel-btn').toggle(state !== 'progress');
+    }
+
+    function loadInstanceOptions(callback){
+        $.get('/api/v1/instances', function(instances){
+            var $sel = $('#isow-instance-select');
+            $sel.empty();
+            if(!Array.isArray(instances) || instances.length === 0){
+                $sel.append('<option value="">No KVM instances found</option>');
+            } else {
+                instances.forEach(function(inst){
+                    var side = inst.usb_mass_storage_side === 2 ? ' (USB on remote side)' : '';
+                    $sel.append($('<option></option>').attr('value', inst.uuid)
+                        .text(inst.uuid + side));
+                });
+            }
+            if(callback) callback();
+        });
+    }
+
+    function openWriteModal(name, size){
+        _writeIsoName = name;
+        _writeLocalFile = null;
+        $('#isow-iso-name').text(name);
+        $('#isow-iso-size').text(size ? '(' + fmtSize(size) + ')' : '');
+        _isowShowState('setup');
+        loadInstanceOptions();
+        $('#modal-iso-write').modal({
+            closable: false,
+            onHidden: function(){ stopStatusPolling(); }
+        }).modal('show');
+    }
+
+    window.startDirectWrite = function(fileList){
+        if(!fileList || fileList.length === 0) return;
+        var f = fileList[0];
+        var n = f.name.toLowerCase();
+        if(!n.endsWith('.iso') && !n.endsWith('.img')){
+            toast('<i class="red times icon"></i> Only .iso and .img files can be written', 'error');
+            document.getElementById('iso-directWriteInput').value = '';
+            return;
+        }
+        _writeIsoName = null;
+        _writeLocalFile = f;
+        $('#isow-iso-name').text(f.name + ' (local file, streamed directly)');
+        $('#isow-iso-size').text('(' + fmtSize(f.size) + ')');
+        _isowShowState('setup');
+        loadInstanceOptions();
+        $('#modal-iso-write').modal({
+            closable: false,
+            onHidden: function(){ stopStatusPolling(); }
+        }).modal('show');
+        document.getElementById('iso-directWriteInput').value = '';
+    };
+
+    function stopStatusPolling(){
+        if(_writeStatusTimer){
+            clearInterval(_writeStatusTimer);
+            _writeStatusTimer = null;
+        }
+    }
+
+    function updateProgressUI(status){
+        var pct = status.percent;
+        var label;
+        if(status.state === 'syncing'){
+            label = 'Flushing data to the drive…';
+            pct = 100;
+        } else if(status.state === 'verifying'){
+            $('#isow-progress-title').text('Verifying written data…');
+            label = fmtSize(status.verified_b) + ' of ' + fmtSize(status.written_b) + ' verified';
+        } else if(pct >= 0){
+            label = fmtSize(status.written_b) + ' of ' + fmtSize(status.total_b) + ' written'
+                  + (status.speed_bps ? ' – ' + fmtSize(status.speed_bps) + '/s' : '');
+        } else {
+            label = fmtSize(status.written_b) + ' written'
+                  + (status.speed_bps ? ' – ' + fmtSize(status.speed_bps) + '/s' : '');
+            pct = 100; // indeterminate: keep bar full but relabel
+        }
+        $('#isow-progressbar').progress({ percent: Math.max(1, Math.round(pct)) });
+        $('#isow-progress-label').text(label);
+    }
+
+    function pollWriteStatus(uuid, opts){
+        opts = opts || {};
+        stopStatusPolling();
+        // In direct-write mode the job starts server-side only once the upload
+        // stream arrives, so the first polls may still see the state of a
+        // previous run. Require an active state first before honoring a
+        // terminal one; the XHR callbacks report completion authoritatively.
+        var seenActive = !opts.requireActive;
+        _writeStatusTimer = setInterval(function(){
+            $.get('/api/v1/storage/' + uuid + '/isowrite/status', function(status){
+                if(!status) return;
+                if(status.state === 'writing' || status.state === 'syncing' || status.state === 'verifying'){
+                    seenActive = true;
+                    updateProgressUI(status);
+                } else if(status.state === 'done' && seenActive){
+                    stopStatusPolling();
+                    _isowShowState('done');
+                    loadISOList();
+                } else if(status.state === 'error' && seenActive){
+                    stopStatusPolling();
+                    $('#isow-error-text').text(status.message || 'Unknown error');
+                    _isowShowState('error');
+                }
+                // 'idle' right after start: keep polling, the job is spinning up
+            });
+        }, opts.interval || 1000);
+    }
+
+    window.confirmWrite = function(){
+        var uuid = $('#isow-instance-select').val();
+        if(!uuid){
+            toast('<i class="red times icon"></i> No target KVM instance selected', 'error');
+            return;
+        }
+
+        _isowShowState('progress');
+        $('#isow-progressbar').progress({ percent: 1 });
+        $('#isow-progress-label').text('Starting…');
+
+        if(_writeIsoName){
+            // Write a library image (server reads the file locally)
+            $('#isow-progress-title').text('Writing image…');
+            $.ajax({
+                url: '/api/v1/storage/' + uuid + '/isowrite',
+                method: 'POST',
+                contentType: 'application/json',
+                headers: csrfHeader(),
+                data: JSON.stringify({ iso_name: _writeIsoName }),
+                success: function(){
+                    pollWriteStatus(uuid);
+                },
+                error: function(xhr){
+                    $('#isow-error-text').text((xhr.responseText || 'Failed to start write').trim());
+                    _isowShowState('error');
+                }
+            });
+        } else if(_writeLocalFile){
+            // Stream the local file straight onto the device
+            $('#isow-progress-title').text('Streaming image to USB drive…');
+            var formData = new FormData();
+            formData.append('size', String(_writeLocalFile.size));
+            formData.append('iso', _writeLocalFile);
+            $.ajax({
+                url: '/api/v1/storage/' + uuid + '/isowrite/upload',
+                method: 'POST',
+                headers: csrfHeader(),
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(){
+                    stopStatusPolling();
+                    _isowShowState('done');
+                    loadISOList();
+                },
+                error: function(xhr){
+                    stopStatusPolling();
+                    $('#isow-error-text').text((xhr.responseText || 'Write failed').trim());
+                    _isowShowState('error');
+                }
+            });
+            // Poll the device-side progress while the upload streams
+            pollWriteStatus(uuid, { requireActive: true });
+        }
+    };
+
+    // --------------- init ---------------
+    loadISOList();
+})();
+</script>
+</body>
+</html>

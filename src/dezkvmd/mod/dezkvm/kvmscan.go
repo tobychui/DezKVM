@@ -2,6 +2,7 @@ package dezkvm
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os/exec"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"imuslab.com/dezkvm/dezkvmd/mod/dezkvm/storage"
 	"imuslab.com/dezkvm/dezkvmd/mod/usbcapture"
 )
 
@@ -29,12 +31,13 @@ The AuxMCU will provide a UUID to uniquely identify
 the USB KVM device subtree.
 */
 type UsbKvmDevice struct {
-	UUID               string   // 16 bytes UUID obtained from AuxMCU, might change after power cycle
-	IsReady            bool     // Whether the device is ready for use (serial port and video device opened successfully)
-	USBKVMDevicePath   string   // e.g. /dev/ttyUSB0
-	AuxMCUDevicePath   string   // e.g. /dev/ttyACM0
-	CaptureDevicePaths []string // e.g. /dev/video0, /dev/video1, etc.
-	AlsaDevicePaths    []string // e.g. /dev/snd/pcmC1D0c, etc.
+	UUID                   string   // 16 bytes UUID obtained from AuxMCU, might change after power cycle
+	IsReady                bool     // Whether the device is ready for use (serial port, video device, audio device, and mass storage device opened successfully)
+	USBKVMDevicePath       string   // e.g. /dev/ttyUSB0
+	AuxMCUDevicePath       string   // e.g. /dev/ttyACM0
+	VideoDevicePaths       []string // e.g. /dev/video0, /dev/video1, etc.
+	AlsaDevicePaths        []string // e.g. /dev/snd/pcmC1D0c, etc, optional
+	MassStorageDeviceUUIDs []string // e.g. UUIDs of the mass storage devices associated with this USB KVM device, optional
 }
 
 // ScannedTTYDevice represents a TTY serial device discovered during scanning,
@@ -92,6 +95,7 @@ func ScanConnectedUsbKvmDevices() ([]*UsbKvmDeviceOption, error) {
 		return nil, errors.New("no USB KVM devices found")
 	}
 
+	// For each discovered USB KVM device group, create a UsbKvmDeviceOption with the matched device paths
 	result := []*UsbKvmDeviceOption{}
 	for _, dev := range possibleKvmDeviceGroup {
 		option := &UsbKvmDeviceOption{
@@ -100,7 +104,7 @@ func ScanConnectedUsbKvmDevices() ([]*UsbKvmDeviceOption, error) {
 			VideoCaptureDevicePath: "",
 			AudioCaptureDevicePath: "",
 		}
-		for _, videoPath := range dev.CaptureDevicePaths {
+		for _, videoPath := range dev.VideoDevicePaths {
 			isCaptureCard := usbcapture.IsCaptureCardVideoInterface(videoPath)
 			if isCaptureCard {
 				option.VideoCaptureDevicePath = videoPath
@@ -111,8 +115,22 @@ func ScanConnectedUsbKvmDevices() ([]*UsbKvmDeviceOption, error) {
 		if len(dev.AlsaDevicePaths) > 0 {
 			option.AudioCaptureDevicePath = dev.AlsaDevicePaths[0] // Use the first audio device by default
 		}
+
+		// Mass storage is optional
+		if len(dev.MassStorageDeviceUUIDs) > 0 {
+			option.EnableMassStorage = true
+			option.MassStoragePTUUID = dev.MassStorageDeviceUUIDs[0] // Use the first mass storage device by default
+		} else {
+			option.EnableMassStorage = false
+			option.MassStoragePTUUID = ""
+		}
 		result = append(result, option)
 	}
+
+	// TODO: Allow user to overwrite the auto-discovered device paths with manual selection in the UI,
+	// and save the user selection for next time.
+	// This is to handle cases where the auto-discovered paths are not correct or not optimal
+	// e.g. custom build devices that is missing some of the expected USB devices
 	return result, nil
 }
 
@@ -137,6 +155,9 @@ func DiscoverUsbKvmSubtree() ([]*UsbKvmDevice, error) {
 	// Get all ALSA PCM devices (USB audio is usually card > 0)
 	alsaDevs, _ := getMatchingDevs("/dev/snd/pcmC*")
 
+	// Get all storage devices (for mass storage functionality)
+	storageDevs, _ := getMatchingDevs("/dev/sd*")
+
 	type devInfo struct {
 		path    string
 		sysPath string
@@ -156,6 +177,7 @@ func DiscoverUsbKvmSubtree() ([]*UsbKvmDevice, error) {
 	ttys := getSys(ttyDevs)
 	videos := getSys(videoDevs)
 	alsas := getSys(alsaDevs)
+	stores := getSys(storageDevs)
 
 	// Find common USB root hub prefix
 	hubPattern := regexp.MustCompile(`^\d+-\d+(\.\d+)*$`)
@@ -172,10 +194,11 @@ func DiscoverUsbKvmSubtree() ([]*UsbKvmDevice, error) {
 
 	// Map hub -> device info
 	type hubGroup struct {
-		ttys   []string
-		acms   []string
-		videos []string
-		alsas  []string
+		ttys    []string
+		acms    []string
+		videos  []string
+		alsas   []string
+		storage []string
 	}
 	hubs := make(map[string]*hubGroup)
 
@@ -242,11 +265,23 @@ func DiscoverUsbKvmSubtree() ([]*UsbKvmDevice, error) {
 			hubs[hub].alsas = append(hubs[hub].alsas, alsa.path)
 		}
 	}
+	for _, thisStore := range stores {
+		hub := getHub(thisStore.sysPath)
+		//fmt.Println("DEBUG:", thisStore.sysPath, "-> hub:", hub)
+		if hub != "" {
+			if hubs[hub] == nil {
+				hubs[hub] = &hubGroup{}
+			}
+			// We will later determine which storage devices are actually associated with the USB KVM device by matching UUIDs from the AuxMCU
+			hubs[hub].storage = append(hubs[hub].storage, thisStore.path)
+		}
+	}
 
 	var result []*UsbKvmDevice
 	for _, g := range hubs {
-		// At least one tty or acm, one video, optionally alsa
-		if (len(g.ttys) > 0 || len(g.acms) > 0) && len(g.videos) > 0 {
+		// At least one tty or acm, one video, optionally alsa and storage devices under the same USB hub
+		// that means we found a USB KVM device group
+		if len(g.ttys) > 0 && len(g.acms) > 0 && len(g.videos) > 0 {
 			// Pick the first tty as USBKVMDevicePath, first acm as AuxMCUDevicePath
 			usbKvm := ""
 			auxMcu := ""
@@ -256,11 +291,33 @@ func DiscoverUsbKvmSubtree() ([]*UsbKvmDevice, error) {
 			if len(g.acms) > 0 {
 				auxMcu = g.acms[0]
 			}
+
+			storagePtUUIDs := map[string]string{} // sysfs PTUUID -> path
+			if len(g.storage) > 0 {
+				for _, s := range g.storage {
+					ptuuid, err := storage.GetPTUUID(s)
+					if err != nil {
+						log.Printf("Warning: could not get UUID for storage device %s: %v", s, err)
+					} else {
+						storagePtUUIDs[ptuuid] = s
+					}
+				}
+			}
+
+			// Convert the PTUUID map to array
+			var storageUUIDs []string
+			for uuid := range storagePtUUIDs {
+				storageUUIDs = append(storageUUIDs, uuid)
+			}
+
+			fmt.Println(usbKvm, auxMcu, g.videos, g.alsas, storageUUIDs)
+
 			result = append(result, &UsbKvmDevice{
-				USBKVMDevicePath:   usbKvm,
-				AuxMCUDevicePath:   auxMcu,
-				CaptureDevicePaths: g.videos,
-				AlsaDevicePaths:    g.alsas,
+				USBKVMDevicePath:       usbKvm,
+				AuxMCUDevicePath:       auxMcu,
+				VideoDevicePaths:       g.videos,
+				AlsaDevicePaths:        g.alsas,
+				MassStorageDeviceUUIDs: storageUUIDs,
 			})
 		}
 	}

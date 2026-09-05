@@ -1,0 +1,569 @@
+/*
+    file-transfer.css
+
+    Styles for the File Transfer tool (tools/file-transfer.html). Uses the
+    shared dez-ui.css design tokens so the tool follows the light/dark theme
+    without carrying its own palette.
+
+    Layout:
+        #ft-banner    storage-side / disconnect notice (hidden by default)
+        #ft-toolbar   nav buttons, path bar, side chip, actions, view toggle
+        #ft-main      #ft-sidebar (root shortcuts) + #ft-content
+        #ft-bottom    selection count and file operations
+*/
+
+/* The chrome icons in file-transfer.js are injected as bare <svg> markup with
+   no width/height attributes, so an <svg> with no rule sizing it stretches to
+   fill its container. Set the default once here instead of relying on every
+   container to remember its own rule. Equal-specificity rules later in this
+   file (.ft-btn svg, .ft-placeholder svg, ...) still override it, and the file
+   icons from file-icons.js carry explicit width/height so they are excluded.
+
+   This cannot be scoped to #ft-root: dez-ui.js re-parents a modal into its
+   dimmer on the body when showing it, which is how the move/copy folder
+   picker ended up with a full-size arrow. */
+svg:not([width]) {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--dez-surface);
+    color: var(--dez-text);
+    font-family: var(--dez-font);
+    font-size: 13px;
+    overflow: hidden;
+}
+
+#ft-root {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+/* ------------------------------------------------------------- toolbar */
+
+#ft-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    background: var(--dez-surface);
+    border-bottom: 1px solid var(--dez-border);
+    flex-shrink: 0;
+}
+
+.ft-navbtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--dez-text-sub);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.ft-navbtn:hover:not(:disabled) { background: var(--dez-surface-2); color: var(--dez-text); }
+.ft-navbtn:disabled { opacity: 0.3; cursor: default; }
+.ft-navbtn svg { width: 16px; height: 16px; }
+#ft-search-close { font-size: 19px; line-height: 1; }
+
+/* Path bar: reads as a label until clicked, then becomes a text field */
+#ft-pathbar {
+    flex: 1;
+    min-width: 60px;
+    display: flex;
+    align-items: center;
+    height: 30px;
+    padding: 0 10px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: var(--dez-surface-2);
+    cursor: text;
+    overflow: hidden;
+}
+#ft-pathbar:hover { border-color: var(--dez-border); }
+#ft-pathbar:focus-within { border-color: var(--dez-accent); background: var(--dez-surface); }
+#ft-pathinput {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-family: var(--dez-font);
+    font-size: 12.5px;
+    color: var(--dez-text);
+    text-overflow: ellipsis;
+}
+
+/* Storage side chip -- also the "which end owns the USB drive" indicator */
+#ft-sidechip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--dez-text-sub);
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+#ft-sidechip:hover { background: var(--dez-surface-2); border-color: var(--dez-border); }
+#ft-sidechip .ft-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--dez-text-sub2);
+    flex-shrink: 0;
+}
+#ft-sidechip.kvm .ft-dot    { background: var(--dez-green); }
+#ft-sidechip.remote .ft-dot { background: var(--dez-orange); }
+
+.ft-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 11px;
+    border: 1px solid var(--dez-border);
+    border-radius: 8px;
+    background: var(--dez-surface);
+    color: var(--dez-text);
+    font-family: var(--dez-font);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.ft-btn:hover:not(:disabled) { background: var(--dez-surface-2); border-color: var(--dez-border-strong); }
+.ft-btn:disabled { opacity: 0.45; cursor: default; }
+.ft-btn svg { width: 14px; height: 14px; }
+.ft-btn.primary {
+    background: var(--dez-accent);
+    border-color: var(--dez-accent);
+    color: #fff;
+}
+.ft-btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
+.ft-btn.danger { color: var(--dez-red); }
+.ft-btn.danger:hover:not(:disabled) { background: rgba(224, 61, 61, 0.1); border-color: var(--dez-red); }
+
+/* View mode toggle (list / thumbnail) */
+#ft-viewtoggle {
+    display: inline-flex;
+    padding: 2px;
+    border-radius: 8px;
+    background: var(--dez-surface-2);
+    flex-shrink: 0;
+}
+#ft-viewtoggle button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 24px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--dez-text-sub);
+    cursor: pointer;
+}
+#ft-viewtoggle button.active {
+    background: var(--dez-surface);
+    color: var(--dez-text);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+#ft-viewtoggle svg { width: 15px; height: 15px; }
+
+/* ------------------------------------------------------------ dropdown */
+
+.ft-menu {
+    position: absolute;
+    min-width: 200px;
+    padding: 5px;
+    border: 1px solid var(--dez-border);
+    border-radius: 10px;
+    background: var(--dez-surface);
+    box-shadow: var(--dez-shadow);
+    z-index: 400;
+}
+.ft-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 7px 10px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--dez-text);
+    font-family: var(--dez-font);
+    font-size: 12.5px;
+    text-align: left;
+    cursor: pointer;
+}
+.ft-menu-item:hover:not(:disabled) { background: var(--dez-surface-2); }
+.ft-menu-item:disabled { opacity: 0.4; cursor: default; }
+.ft-menu-item svg { width: 15px; height: 15px; flex-shrink: 0; opacity: 0.7; }
+.ft-menu-item.danger { color: var(--dez-red); }
+.ft-menu-sep { height: 1px; margin: 5px 8px; background: var(--dez-border); }
+
+/* -------------------------------------------------------------- banner */
+
+#ft-banner {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    margin: 8px 10px 0;
+    border-radius: 10px;
+    background: var(--dez-accent-soft);
+    border: 1px solid var(--dez-border);
+    flex-shrink: 0;
+}
+#ft-banner.shown { display: flex; }
+#ft-banner.warn { background: rgba(242, 153, 74, 0.13); border-color: rgba(242, 153, 74, 0.4); }
+#ft-banner .ft-banner-icon { flex-shrink: 0; color: var(--dez-accent); }
+#ft-banner.warn .ft-banner-icon { color: var(--dez-orange); }
+#ft-banner .ft-banner-icon svg { width: 18px; height: 18px; display: block; }
+#ft-banner .ft-banner-text { flex: 1; min-width: 0; line-height: 1.45; }
+#ft-banner .ft-banner-text b { display: block; font-weight: 600; font-size: 12.5px; }
+#ft-banner .ft-banner-text span { font-size: 12px; color: var(--dez-text-sub); }
+
+/* ----------------------------------------------------- main / sidebar */
+
+#ft-main {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
+#ft-sidebar {
+    width: 148px;
+    flex-shrink: 0;
+    padding: 8px;
+    border-right: 1px solid var(--dez-border);
+    overflow-y: auto;
+    background: var(--dez-surface);
+}
+.ft-shortcut {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 9px;
+    margin-bottom: 2px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--dez-text);
+    font-family: var(--dez-font);
+    font-size: 12.5px;
+    text-align: left;
+    cursor: pointer;
+}
+.ft-shortcut:hover { background: var(--dez-surface-2); }
+.ft-shortcut.active { background: var(--dez-accent-soft); color: var(--dez-accent); font-weight: 500; }
+.ft-shortcut .ft-sc-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.ft-shortcut svg { flex-shrink: 0; }
+
+#ft-content {
+    position: relative;   /* anchors #ft-dropoverlay */
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--dez-surface);
+}
+#ft-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+}
+
+/* --------------------------------------------------------- list view */
+
+#ft-table { width: 100%; border-collapse: collapse; }
+#ft-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--dez-surface);
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--dez-text-sub);
+    border-bottom: 1px solid var(--dez-border);
+    white-space: nowrap;
+    user-select: none;
+}
+#ft-table thead th.sortable { cursor: pointer; }
+#ft-table thead th.sortable:hover { color: var(--dez-text); }
+#ft-table thead th .ft-sort-arrow {
+    display: inline-block;
+    width: 10px;
+    margin-left: 3px;
+    opacity: 0;
+    font-size: 9px;
+}
+#ft-table thead th.sorted .ft-sort-arrow { opacity: 0.8; }
+#ft-table tbody tr { cursor: default; }
+#ft-table tbody tr:hover { background: var(--dez-surface-2); }
+#ft-table tbody tr.selected { background: var(--dez-accent-soft); }
+#ft-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--dez-border);
+    vertical-align: middle;
+}
+.ft-cell-name {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+}
+.ft-cell-name .ft-name-text {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.ft-col-size, .ft-col-date, .ft-col-type {
+    color: var(--dez-text-sub);
+    white-space: nowrap;
+    font-size: 12px;
+}
+.ft-col-size { text-align: right; }
+.ft-col-act { text-align: right; white-space: nowrap; width: 92px; }
+.ft-rowbtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--dez-text-sub);
+    cursor: pointer;
+}
+.ft-rowbtn:hover { background: var(--dez-border); color: var(--dez-text); }
+.ft-rowbtn svg { width: 15px; height: 15px; }
+
+/* -------------------------------------------------------- thumb view */
+
+#ft-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+    gap: 10px;
+    padding: 12px;
+}
+.ft-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 6px 9px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    cursor: default;
+    text-align: center;
+}
+.ft-tile:hover { background: var(--dez-surface-2); }
+.ft-tile.selected { background: var(--dez-accent-soft); border-color: var(--dez-accent); }
+.ft-tile-thumb {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: var(--dez-surface-2);
+    overflow: hidden;
+}
+.ft-tile.selected .ft-tile-thumb { background: var(--dez-surface); }
+.ft-tile-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.ft-tile-name {
+    width: 100%;
+    font-size: 12px;
+    line-height: 1.35;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    word-break: break-word;
+}
+.ft-tile-sub { font-size: 11px; color: var(--dez-text-sub); }
+
+/* ------------------------------------------------------ empty / states */
+
+.ft-placeholder {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 60px 20px;
+    color: var(--dez-text-sub);
+    text-align: center;
+}
+.ft-placeholder.shown { display: flex; }
+.ft-placeholder svg { width: 34px; height: 34px; opacity: 0.5; }
+
+/* Full-surface drop overlay, shown only while files are dragged over */
+#ft-dropoverlay {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 8px;
+    background: rgba(43, 110, 242, 0.1);
+    border: 2px dashed var(--dez-accent);
+    border-radius: 10px;
+    color: var(--dez-accent);
+    font-weight: 500;
+    pointer-events: none;
+}
+#ft-dropoverlay.shown { display: flex; }
+#ft-dropoverlay svg { width: 30px; height: 30px; }
+
+/* --------------------------------------------------------- bottom bar */
+
+#ft-bottom {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border-top: 1px solid var(--dez-border);
+    background: var(--dez-surface);
+    flex-shrink: 0;
+}
+#ft-selinfo {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--dez-text-sub);
+    white-space: nowrap;
+    margin-right: 4px;
+}
+#ft-bottom .ft-spacer { flex: 1; }
+
+/* Upload progress strip, replaces the selection text while uploading */
+#ft-progress {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    font-size: 12px;
+    color: var(--dez-text-sub);
+}
+#ft-progress.shown { display: flex; }
+#ft-progress .ft-bar {
+    flex: 1;
+    max-width: 220px;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--dez-surface-2);
+    overflow: hidden;
+}
+#ft-progress .ft-bar > i {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--dez-accent);
+    transition: width 0.15s;
+}
+
+/* ------------------------------------------------------------- modals */
+
+.ft-field { margin-bottom: 10px; }
+.ft-field label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 12px;
+    color: var(--dez-text-sub);
+}
+.ft-input {
+    width: 100%;
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--dez-border);
+    border-radius: 8px;
+    background: var(--dez-surface);
+    color: var(--dez-text);
+    font-family: var(--dez-font);
+    font-size: 13px;
+    outline: none;
+}
+.ft-input:focus { border-color: var(--dez-accent); }
+
+/* Key/value table used by the device information modal */
+.ft-kv { width: 100%; border-collapse: collapse; }
+.ft-kv td { padding: 6px 0; border-bottom: 1px solid var(--dez-border); font-size: 12.5px; }
+.ft-kv tr:last-child td { border-bottom: none; }
+.ft-kv td:first-child { color: var(--dez-text-sub); white-space: nowrap; padding-right: 16px; }
+.ft-kv td:last-child { text-align: right; word-break: break-all; }
+
+/* Usage meter in the device information modal */
+.ft-meter {
+    height: 7px;
+    border-radius: 4px;
+    background: var(--dez-surface-2);
+    overflow: hidden;
+    margin: 4px 0 6px;
+}
+.ft-meter > i { display: block; height: 100%; background: var(--dez-accent); }
+.ft-meter.high > i { background: var(--dez-orange); }
+.ft-meter.full > i { background: var(--dez-red); }
+
+/* Destination folder picker (move / copy) */
+#ft-picker-list {
+    max-height: 240px;
+    overflow-y: auto;
+    border: 1px solid var(--dez-border);
+    border-radius: 8px;
+    padding: 4px;
+}
+.ft-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 9px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--dez-text);
+    font-family: var(--dez-font);
+    font-size: 12.5px;
+    text-align: left;
+    cursor: pointer;
+}
+.ft-picker-row:hover { background: var(--dez-surface-2); }

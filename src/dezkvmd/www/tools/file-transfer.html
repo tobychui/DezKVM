@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="dezkvm.csrf.token" content="{{.csrfToken}}">
+    <title>File Transfer – DezKVM</title>
+    <link rel="stylesheet" href="/css/dez-ui.css">
+    <link rel="stylesheet" href="/css/file-transfer.css">
+    <script src="/js/jquery-3.7.1.min.js"></script>
+    <script src="/js/dez-ui.js"></script>
+    <script src="/js/file-icons.js"></script>
+</head>
+<body class="dez">
+
+<div id="ft-root">
+
+    <!-- Toolbar: navigation, path, storage side, actions, view toggle -->
+    <div id="ft-toolbar">
+        <button class="ft-navbtn" id="ft-back" title="Back"></button>
+        <button class="ft-navbtn" id="ft-forward" title="Forward"></button>
+        <button class="ft-navbtn" id="ft-up" title="Parent folder"></button>
+        <button class="ft-navbtn" id="ft-refresh" title="Refresh"></button>
+
+        <!-- Manual path entry. The drive is addressed by its mass-storage
+             UUID rather than a drive letter. -->
+        <div id="ft-pathbar">
+            <input type="text" id="ft-pathinput" spellcheck="false" autocomplete="off">
+        </div>
+
+        <button id="ft-sidechip" title="USB mass storage side">
+            <span class="ft-dot"></span><span id="ft-sidelabel">…</span>
+        </button>
+
+        <button class="ft-btn primary" id="ft-btn-upload" data-needs-storage></button>
+        <button class="ft-btn" id="ft-btn-newfolder" data-needs-storage></button>
+        <button class="ft-btn" id="ft-btn-more"></button>
+
+        <div id="ft-viewtoggle">
+            <button id="ft-view-list" title="List view"></button>
+            <button id="ft-view-grid" title="Thumbnail view"></button>
+        </div>
+    </div>
+
+    <!-- Storage side / disconnect notice -->
+    <div id="ft-banner" class="ft-banner">
+        <span class="ft-banner-icon"></span>
+        <span class="ft-banner-text"></span>
+        <button class="ft-btn" id="ft-banner-action">Switch to KVM Side</button>
+    </div>
+
+    <!-- Search strip (opened from the More menu) -->
+    <div id="ft-search-wrap" style="display:none;padding:8px 10px 0;">
+        <div style="display:flex;align-items:center;gap:6px;">
+            <input type="text" class="ft-input" id="ft-search-input" placeholder="Search in this folder…">
+            <button class="ft-navbtn" id="ft-search-close" title="Close search"></button>
+        </div>
+    </div>
+
+    <div id="ft-main">
+        <!-- Shortcuts to the user's folders at the root of the mount point -->
+        <div id="ft-sidebar"></div>
+
+        <div id="ft-content">
+            <div id="ft-dropoverlay"></div>
+            <div id="ft-scroll">
+                <!-- List view -->
+                <div id="ft-table-wrap">
+                    <table id="ft-table">
+                        <thead>
+                            <tr>
+                                <th class="sortable" data-sort="name">Name <span class="ft-sort-arrow"></span></th>
+                                <th class="sortable ft-col-size" data-sort="size" style="width:90px">Size <span class="ft-sort-arrow"></span></th>
+                                <th class="sortable" data-sort="date" style="width:130px">Modified <span class="ft-sort-arrow"></span></th>
+                                <th class="sortable" data-sort="type" style="width:90px">Type <span class="ft-sort-arrow"></span></th>
+                                <th style="width:92px"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="ft-tbody"></tbody>
+                    </table>
+                </div>
+
+                <!-- Thumbnail view -->
+                <div id="ft-grid" style="display:none"></div>
+
+                <div class="ft-placeholder" id="ft-empty">
+                    <span class="ft-empty-icon"></span>
+                    <div class="ft-empty-text"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom bar: selection and file operations -->
+    <div id="ft-bottom">
+        <span id="ft-selinfo">
+            <span id="ft-status"></span>
+            <span id="ft-selcount" style="color:var(--dez-accent)"></span>
+        </span>
+        <div id="ft-progress">
+            <span id="ft-progress-label"></span>
+            <span class="ft-bar"><i id="ft-progress-bar"></i></span>
+        </div>
+        <span class="ft-spacer"></span>
+        <button class="ft-btn" id="ft-op-download" disabled></button>
+        <button class="ft-btn danger" id="ft-op-delete" disabled></button>
+        <button class="ft-btn" id="ft-op-move" disabled></button>
+        <button class="ft-btn" id="ft-op-copy" disabled></button>
+        <button class="ft-btn" id="ft-op-more" disabled></button>
+    </div>
+</div>
+
+<input type="file" id="ft-fileinput" multiple style="display:none">
+
+<!-- ------------------------------------------------------------ modals -->
+
+<div class="ui tiny modal" id="ft-modal-create">
+    <div class="header" id="ft-create-title">New Folder</div>
+    <div class="content">
+        <input type="text" class="ft-input" id="ft-create-input">
+    </div>
+    <div class="actions">
+        <div class="ui cancel button">Cancel</div>
+        <div class="ui blue approve button">Create</div>
+    </div>
+</div>
+
+<div class="ui tiny modal" id="ft-modal-rename">
+    <div class="header">Rename</div>
+    <div class="content">
+        <div class="ft-field">
+            <label>New name</label>
+            <input type="text" class="ft-input" id="ft-rename-input">
+        </div>
+    </div>
+    <div class="actions">
+        <div class="ui cancel button">Cancel</div>
+        <div class="ui blue approve button">Rename</div>
+    </div>
+</div>
+
+<div class="ui tiny modal" id="ft-modal-delete">
+    <div class="header">Confirm Delete</div>
+    <div class="content">
+        <p id="ft-delete-msg"></p>
+        <p style="color:var(--dez-red);font-size:12px;margin:0;">This cannot be undone.</p>
+    </div>
+    <div class="actions">
+        <div class="ui cancel button">Cancel</div>
+        <div class="ui red approve button">Delete</div>
+    </div>
+</div>
+
+<div class="ui tiny modal" id="ft-modal-picker">
+    <div class="header" id="ft-picker-title">Move to folder</div>
+    <div class="content">
+        <div class="ft-field">
+            <label>Destination</label>
+            <div id="ft-picker-path" style="font-size:12.5px;margin-bottom:6px;"></div>
+        </div>
+        <div id="ft-picker-list"></div>
+    </div>
+    <div class="actions">
+        <div class="ui cancel button">Cancel</div>
+        <div class="ui blue approve button" id="ft-picker-confirm">Move here</div>
+    </div>
+</div>
+
+<div class="ui tiny modal" id="ft-modal-info">
+    <div class="header">Device Information</div>
+    <div class="content" id="ft-info-body"></div>
+    <div class="actions">
+        <div class="ui cancel button">Close</div>
+    </div>
+</div>
+
+<div class="ui tiny modal" id="ft-modal-unmount">
+    <div class="header">Unmount Drive</div>
+    <div class="content">
+        <p>Flush pending writes and unmount the USB drive from the KVM host?</p>
+        <p style="font-size:12px;color:var(--dez-text-sub);margin:0;">
+            The files stop being browsable here until the drive is mounted again
+            or switched back to the KVM side.
+        </p>
+    </div>
+    <div class="actions">
+        <div class="ui cancel button">Cancel</div>
+        <div class="ui blue approve button">Unmount</div>
+    </div>
+</div>
+
+<script src="/js/file-transfer.js"></script>
+</body>
+</html>

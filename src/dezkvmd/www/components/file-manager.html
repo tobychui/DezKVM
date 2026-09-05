@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="dezkvm.csrf.token" content="{{.csrfToken}}">
+    <title>File Manager – DezKVM</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/semantic.min.css"
+          integrity="sha512-ySrYzxj+EI1e9xj/kRYqeDL5l1wW0IWY8pzHNTIZ+vc1D3Z14UDNPbwup4yOUmlRemYjgUXsUZ/xvCQU2ThEAw=="
+          crossorigin="anonymous" referrerpolicy="no-referrer">
+    <script src="../js/jquery-3.7.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/semantic.min.js"
+            integrity="sha512-Y/wIVu+S+XJsDL7I+nL50kAVFLMqSdvuLqF2vMoRqiMkmvcqFjEpEgeu6Rx8tpZXKp77J8OUpMKy0m3jLYhbbw=="
+            crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <style>
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0; padding: 0;
+            background: #f8f8f8;
+            font-family: system-ui, -apple-system, sans-serif;
+            font-size: 13px;
+            height: 100%;
+        }
+
+        /* ---- Toolbar ---- */
+        #fm-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 10px;
+            background: #fff;
+            border-bottom: 1px solid #e0e0e0;
+            flex-wrap: wrap;
+        }
+        #fm-toolbar .ui.breadcrumb { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        #fm-toolbar .divider { margin: 0 2px; }
+        #fm-actions { display: flex; gap: 6px; }
+
+        /* ---- Drop zone ---- */
+        #fm-dropzone {
+            border: 2px dashed #ccc;
+            border-radius: 6px;
+            text-align: center;
+            padding: 10px;
+            color: #aaa;
+            font-size: 12px;
+            margin: 6px 8px 2px;
+            transition: border-color 0.2s, background 0.2s;
+            cursor: pointer;
+        }
+        #fm-dropzone.dragover {
+            border-color: #2185d0;
+            background: #edf4fc;
+            color: #2185d0;
+        }
+        #fm-dropzone.uploading { border-color: #fbbd08; background: #fffde7; color: #9a6400; }
+        #fm-fileInput { display: none; }
+
+        /* ---- File table ---- */
+        #fm-table-wrap { overflow-y: auto; max-height: calc(100vh - 140px); padding: 0 8px 8px; }
+        .fm-table { width: 100%; border-collapse: collapse; }
+        .fm-table thead th {
+            position: sticky; top: 0;
+            background: #f0f0f0;
+            padding: 6px 8px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 1px solid #ddd;
+            user-select: none;
+            white-space: nowrap;
+        }
+        .fm-table tbody tr {
+            transition: background 0.1s;
+            cursor: default;
+        }
+        .fm-table tbody tr:hover { background: #f0f5ff; }
+        .fm-table tbody tr.selected { background: #dce8fa; }
+        .fm-table td { padding: 5px 8px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+        .fm-table td.fm-name {
+            word-break: break-all;
+            max-width: 220px;
+        }
+        .fm-table td.fm-name .name-label { cursor: pointer; }
+        .fm-table td.fm-name .name-label:hover { text-decoration: underline; color: #2185d0; }
+        .fm-table td.fm-size, .fm-table td.fm-date { white-space: nowrap; color: #666; }
+        .fm-table td.fm-actions { white-space: nowrap; text-align: right; }
+        .fm-table td.fm-actions .ui.button { padding: 4px 8px; font-size: 11px; }
+        .fm-icon { margin-right: 4px; }
+
+        /* ---- Rename input ---- */
+        .rename-input {
+            border: 1px solid #2185d0;
+            border-radius: 3px;
+            padding: 2px 5px;
+            font-size: 13px;
+            width: 100%;
+        }
+
+        /* ---- Empty state ---- */
+        #fm-empty {
+            text-align: center;
+            padding: 40px 0;
+            color: #aaa;
+            display: none;
+        }
+
+        /* ---- Status bar ---- */
+        #fm-statusbar {
+            padding: 4px 10px;
+            font-size: 11px;
+            color: #888;
+            background: #fff;
+            border-top: 1px solid #e8e8e8;
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+        }
+
+        /* ---- Modal override ---- */
+        .ui.modal { font-size: 13px; }
+    </style>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div id="fm-toolbar">
+    <div class="ui breadcrumb" id="fm-breadcrumb">
+        <span class="section" data-path="/" style="cursor:pointer" onclick="navigateTo('/')">
+            <i class="home icon"></i>Root
+        </span>
+    </div>
+    <div id="fm-actions">
+        <button class="ui mini blue icon button" title="Upload file(s)" onclick="document.getElementById('fm-fileInput').click()">
+            <i class="upload icon"></i> Upload
+        </button>
+        <button class="ui mini teal icon button" title="New folder" onclick="showNewFolderModal()">
+            <i class="folder plus icon"></i> New Folder
+        </button>
+        <button class="ui mini green icon button" title="New file" onclick="showNewFileModal()">
+            <i class="file plus icon"></i> New File
+        </button>
+        <button class="ui mini icon button" title="Refresh" onclick="refresh()">
+            <i class="sync icon"></i>
+        </button>
+    </div>
+</div>
+
+<!-- Hidden file input for upload -->
+<input type="file" id="fm-fileInput" multiple onchange="uploadFiles(this.files)">
+
+<!-- Drag-and-drop zone -->
+<div id="fm-dropzone" onclick="document.getElementById('fm-fileInput').click()">
+    <i class="cloud upload icon"></i> Drop files here to upload, or click to browse
+</div>
+
+<!-- File listing -->
+<div id="fm-table-wrap">
+    <table class="fm-table">
+        <thead>
+            <tr>
+                <th style="width:24px"></th>
+                <th>Name</th>
+                <th style="width:80px">Size</th>
+                <th style="width:140px">Modified</th>
+                <th style="width:120px"></th>
+            </tr>
+        </thead>
+        <tbody id="fm-tbody"></tbody>
+    </table>
+    <div id="fm-empty">
+        <i class="folder open outline icon" style="font-size:2em;"></i>
+        <p>This folder is empty.</p>
+    </div>
+</div>
+
+<!-- Status bar -->
+<div id="fm-statusbar">Loading...</div>
+
+<!-- New Folder Modal -->
+<div class="ui tiny modal" id="modal-new-folder">
+    <div class="header"><i class="folder plus icon"></i> New Folder</div>
+    <div class="content">
+        <div class="ui fluid input">
+            <input type="text" id="input-new-folder" placeholder="Folder name">
+        </div>
+    </div>
+    <div class="actions">
+        <div class="ui cancel button">Cancel</div>
+        <div class="ui blue approve button">Create</div>
+    </div>
+</div>
+
+<!-- New File Modal -->
+<div class="ui tiny modal" id="modal-new-file">
+    <div class="header"><i class="file plus icon"></i> New File</div>
+    <div class="content">
+        <div class="ui fluid input">
+            <input type="text" id="input-new-file" placeholder="File name">
+        </div>
+    </div>
+    <div class="actions">
+        <div class="ui cancel button">Cancel</div>
+        <div class="ui blue approve button">Create</div>
+    </div>
+</div>
+
+<!-- Delete Confirm Modal -->
+<div class="ui tiny modal" id="modal-confirm-delete">
+    <div class="header"><i class="trash icon"></i> Confirm Delete</div>
+    <div class="content">
+        <p id="modal-delete-msg">Are you sure you want to delete this item?</p>
+        <p class="ui tiny red message" style="margin-top:0.4em;">
+            <i class="warning icon"></i> This action cannot be undone.
+        </p>
+    </div>
+    <div class="actions">
+        <div class="ui cancel button">Cancel</div>
+        <div class="ui red approve button">Delete</div>
+    </div>
+</div>
+
+<script>
+(function(){
+    // --------------- config ---------------
+    const params     = new URLSearchParams(window.location.search);
+    const UUID       = params.get('uuid') || '';
+    const CSRF_TOKEN = document.querySelector('meta[name="dezkvm.csrf.token"]')
+                         ? document.querySelector('meta[name="dezkvm.csrf.token"]').getAttribute('content')
+                         : '';
+
+    const API_BASE   = '/api/v1/storage/' + UUID;
+
+    // --------------- state ---------------
+    let currentPath = '/';
+
+    // --------------- helpers ---------------
+    function csrfHeader(){
+        return { 'dezkvm_csrf_token': CSRF_TOKEN };
+    }
+
+    function fmtSize(bytes){
+        if(bytes == null) return '';
+        if(bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
+        if(bytes >= 1048576)    return (bytes / 1048576).toFixed(1)    + ' MB';
+        if(bytes >= 1024)       return (bytes / 1024).toFixed(0)       + ' KB';
+        return bytes + ' B';
+    }
+
+    function fmtDate(iso){
+        if(!iso) return '';
+        var d = new Date(iso);
+        return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    }
+
+    function fileIcon(entry){
+        if(entry.is_dir) return 'folder yellow icon';
+        var n = entry.name.toLowerCase();
+        if(/\.(jpg|jpeg|png|gif|bmp|webp|heic|svg)$/.test(n)) return 'file image blue icon';
+        if(/\.(mp4|mkv|avi|mov|wmv|flv)$/.test(n))            return 'file video purple icon';
+        if(/\.(mp3|wav|flac|aac|ogg|m4a)$/.test(n))           return 'file audio teal icon';
+        if(/\.(pdf)$/.test(n))                                 return 'file pdf red icon';
+        if(/\.(doc|docx|odt|rtf)$/.test(n))                   return 'file word blue icon';
+        if(/\.(xls|xlsx|ods|csv)$/.test(n))                   return 'file excel green icon';
+        if(/\.(ppt|pptx|odp)$/.test(n))                       return 'file powerpoint orange icon';
+        if(/\.(zip|tar|gz|bz2|xz|7z|rar)$/.test(n))          return 'file archive olive icon';
+        if(/\.(txt|md|log|ini|cfg|conf|yaml|yml|toml)$/.test(n)) return 'file alternate outline icon';
+        if(/\.(js|ts|py|go|sh|html|css|json|xml)$/.test(n))  return 'file code outline icon';
+        if(/\.(exe|bin|elf|deb|rpm|dmg|apk)$/.test(n))       return 'file alternate icon';
+        if(/\.(iso|img)$/.test(n))                             return 'compact disc icon';
+        return 'file outline icon';
+    }
+
+    function joinPath(dir, name){
+        return dir.replace(/\/+$/, '') + '/' + name;
+    }
+
+    function parentPath(p){
+        var parts = p.replace(/\/+$/, '').split('/');
+        parts.pop();
+        return parts.length === 0 ? '/' : parts.join('/') || '/';
+    }
+
+    function escHtml(s){
+        return String(s)
+            .replace(/&/g,'&amp;')
+            .replace(/</g,'&lt;')
+            .replace(/>/g,'&gt;')
+            .replace(/"/g,'&quot;');
+    }
+
+    function toast(msg, type){
+        type = type || '';
+        if(typeof $ !== 'undefined' && $.toast){
+            $.toast({ message: msg, class: type, duration: 3000 });
+        }
+    }
+
+    function setStatus(msg){ document.getElementById('fm-statusbar').textContent = msg; }
+
+    // --------------- breadcrumb ---------------
+    function renderBreadcrumb(path){
+        var $bc = $('#fm-breadcrumb');
+        $bc.empty();
+        var parts = path.replace(/^\//, '').split('/').filter(Boolean);
+
+        var rootEl = $('<span class="section" style="cursor:pointer"></span>')
+            .html('<i class="home icon"></i>Root')
+            .on('click', function(){ navigateTo('/'); });
+        $bc.append(rootEl);
+
+        var built = '';
+        parts.forEach(function(p, i){
+            built += '/' + p;
+            $bc.append('<span class="divider"> / </span>');
+            var isLast = (i === parts.length - 1);
+            var el = $('<span class="section"></span>').text(p);
+            if(!isLast){
+                var pathCopy = built;
+                el.css('cursor','pointer').on('click', function(){ navigateTo(pathCopy); });
+            } else {
+                el.css('font-weight','600');
+            }
+            $bc.append(el);
+        });
+    }
+
+    // --------------- list dir ---------------
+    function navigateTo(path){
+        currentPath = path;
+        renderBreadcrumb(path);
+        loadDir(path);
+    }
+
+    // Exposed globally so the toolbar onclick attribute and parent-window
+    // postMessage notifications can call it.
+    window.refresh = function(){ loadDir(currentPath); };
+    function refresh(){ loadDir(currentPath); }
+
+    function loadDir(path){
+        if(!UUID){ setStatus('No device UUID.'); return; }
+        setStatus('Loading...');
+        $.ajax({
+            url: API_BASE + '/files',
+            method: 'GET',
+            data: { path: path },
+            success: function(entries){
+                renderEntries(path, entries || []);
+            },
+            error: function(xhr){
+                setStatus('Error loading directory.');
+                toast('<i class="red exclamation circle icon"></i> ' + (xhr.responseText || 'Failed to list directory'), 'error');
+            }
+        });
+    }
+
+    function renderEntries(path, entries){
+        var $tbody = $('#fm-tbody');
+        $tbody.empty();
+
+        // Sort: dirs first, then by name
+        entries.sort(function(a, b){
+            if(a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
+            return a.name.localeCompare(b.name);
+        });
+
+        // "Go up" row (if not root)
+        if(path !== '/'){
+            var parentRow = $('<tr></tr>');
+            parentRow.append('<td><i class="folder open outline icon" style="color:#aaa"></i></td>');
+            parentRow.append(
+                $('<td class="fm-name"></td>').append(
+                    $('<span class="name-label"></span>').text('..').on('click', function(){
+                        navigateTo(parentPath(path));
+                    })
+                )
+            );
+            parentRow.append('<td class="fm-size"></td>');
+            parentRow.append('<td class="fm-date"></td>');
+            parentRow.append('<td class="fm-actions"></td>');
+            $tbody.append(parentRow);
+        }
+
+        entries.forEach(function(e){
+            var row = $('<tr></tr>');
+            var entryPath = joinPath(path, e.name);
+
+            // Icon cell
+            row.append('<td><i class="fm-icon ' + escHtml(fileIcon(e)) + '"></i></td>');
+
+            // Name cell
+            var nameCell = $('<td class="fm-name"></td>');
+            var nameSpan = $('<span class="name-label"></span>').text(e.name);
+            if(e.is_dir){
+                nameSpan.on('click', function(){ navigateTo(entryPath); });
+            }
+            nameCell.append(nameSpan);
+            row.append(nameCell);
+
+            // Size cell
+            row.append('<td class="fm-size">' + (e.is_dir ? '' : escHtml(fmtSize(e.size))) + '</td>');
+
+            // Date cell
+            row.append('<td class="fm-date">' + escHtml(fmtDate(e.mod_time)) + '</td>');
+
+            // Actions cell
+            var actCell = $('<td class="fm-actions"></td>');
+
+            if(!e.is_dir){
+                var dlBtn = $('<a class="ui mini basic icon button" title="Download"></a>')
+                    .html('<i class="download icon"></i>')
+                    .attr('href', API_BASE + '/download?path=' + encodeURIComponent(entryPath))
+                    .attr('download', e.name);
+                actCell.append(dlBtn);
+            }
+
+            var rnBtn = $('<button class="ui mini basic icon button" title="Rename"></button>')
+                .html('<i class="pencil icon"></i>')
+                .on('click', function(){ startRename(row, nameCell, nameSpan, e, entryPath); });
+            actCell.append(rnBtn);
+
+            var delBtn = $('<button class="ui mini basic red icon button" title="Delete"></button>')
+                .html('<i class="trash icon"></i>')
+                .on('click', function(){ confirmDelete(entryPath, e.name, e.is_dir); });
+            actCell.append(delBtn);
+
+            row.append(actCell);
+            $tbody.append(row);
+        });
+
+        var empty = document.getElementById('fm-empty');
+        empty.style.display = entries.length === 0 ? 'block' : 'none';
+        setStatus(entries.length + ' item' + (entries.length !== 1 ? 's' : ''));
+    }
+
+    // --------------- inline rename ---------------
+    function startRename(row, nameCell, nameSpan, entry, entryPath){
+        if(nameCell.find('.rename-input').length) return; // already editing
+
+        var input = $('<input class="rename-input" type="text">')
+            .val(entry.name)
+            .on('keydown', function(e){
+                if(e.key === 'Enter')  commitRename(this, entry, entryPath, nameSpan);
+                if(e.key === 'Escape') cancelRename(nameSpan, input);
+            });
+
+        nameSpan.hide();
+        nameCell.append(input);
+        input.trigger('focus').trigger('select');
+    }
+
+    function cancelRename(nameSpan, input){
+        nameSpan.show();
+        input.remove();
+    }
+
+    function commitRename(inputEl, entry, entryPath, nameSpan){
+        var newName = $(inputEl).val().trim();
+        if(!newName || newName === entry.name){
+            cancelRename(nameSpan, $(inputEl));
+            return;
+        }
+        $.ajax({
+            url: API_BASE + '/rename',
+            method: 'POST',
+            contentType: 'application/json',
+            headers: csrfHeader(),
+            data: JSON.stringify({ path: entryPath, new_name: newName }),
+            success: function(){
+                toast('<i class="green check icon"></i> Renamed to ' + escHtml(newName));
+                refresh();
+            },
+            error: function(xhr){
+                toast('<i class="red times icon"></i> Rename failed: ' + (xhr.responseText || ''), 'error');
+                cancelRename(nameSpan, $(inputEl));
+            }
+        });
+    }
+
+    // --------------- delete ---------------
+    var _pendingDeletePath = null;
+
+    function confirmDelete(path, name, isDir){
+        _pendingDeletePath = path;
+        var what = isDir ? 'folder' : 'file';
+        $('#modal-delete-msg').text('Delete ' + what + ' "' + name + '"?');
+        $('#modal-confirm-delete').modal({
+            onApprove: function(){
+                doDelete(_pendingDeletePath);
+            }
+        }).modal('show');
+    }
+
+    function doDelete(path){
+        $.ajax({
+            url: API_BASE + '/files?path=' + encodeURIComponent(path),
+            method: 'DELETE',
+            headers: csrfHeader(),
+            success: function(){
+                toast('<i class="green check icon"></i> Deleted');
+                refresh();
+            },
+            error: function(xhr){
+                toast('<i class="red times icon"></i> Delete failed: ' + (xhr.responseText || ''), 'error');
+            }
+        });
+    }
+
+    // --------------- new folder ---------------
+    window.showNewFolderModal = function(){
+        $('#input-new-folder').val('');
+        $('#modal-new-folder').modal({
+            onApprove: function(){
+                var name = $('#input-new-folder').val().trim();
+                if(!name) return false; // keep modal open
+                createEntry('dir', joinPath(currentPath, name));
+            }
+        }).modal('show');
+        setTimeout(function(){ $('#input-new-folder').trigger('focus'); }, 200);
+    };
+
+    // --------------- new file ---------------
+    window.showNewFileModal = function(){
+        $('#input-new-file').val('');
+        $('#modal-new-file').modal({
+            onApprove: function(){
+                var name = $('#input-new-file').val().trim();
+                if(!name) return false;
+                createEntry('file', joinPath(currentPath, name));
+            }
+        }).modal('show');
+        setTimeout(function(){ $('#input-new-file').trigger('focus'); }, 200);
+    };
+
+    function createEntry(type, path){
+        $.ajax({
+            url: API_BASE + '/files',
+            method: 'POST',
+            contentType: 'application/json',
+            headers: csrfHeader(),
+            data: JSON.stringify({ path: path, type: type }),
+            success: function(){
+                toast('<i class="green check icon"></i> Created');
+                refresh();
+            },
+            error: function(xhr){
+                toast('<i class="red times icon"></i> Create failed: ' + (xhr.responseText || ''), 'error');
+            }
+        });
+    }
+
+    // --------------- upload ---------------
+    window.uploadFiles = function(fileList){
+        if(!fileList || fileList.length === 0) return;
+        var formData = new FormData();
+        formData.append('path', currentPath);
+        for(var i = 0; i < fileList.length; i++){
+            formData.append('files', fileList[i]);
+        }
+        var $zone = $('#fm-dropzone');
+        $zone.addClass('uploading').text('Uploading ' + fileList.length + ' file(s)...');
+        setStatus('Uploading...');
+        $.ajax({
+            url: API_BASE + '/upload',
+            method: 'POST',
+            headers: csrfHeader(),
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(res){
+                $zone.removeClass('uploading').html('<i class="cloud upload icon"></i> Drop files here to upload, or click to browse');
+                toast('<i class="green check icon"></i> Uploaded ' + (res.uploaded || []).length + ' file(s)');
+                refresh();
+            },
+            error: function(xhr){
+                $zone.removeClass('uploading').html('<i class="cloud upload icon"></i> Drop files here to upload, or click to browse');
+                toast('<i class="red times icon"></i> Upload failed: ' + (xhr.responseText || ''), 'error');
+                setStatus('Upload failed.');
+            }
+        });
+        // Reset the file input so the same file can be re-selected
+        document.getElementById('fm-fileInput').value = '';
+    };
+
+    // --------------- drag-and-drop ---------------
+    (function initDragDrop(){
+        var zone = document.getElementById('fm-dropzone');
+        zone.addEventListener('dragover', function(e){
+            e.preventDefault();
+            zone.classList.add('dragover');
+        });
+        zone.addEventListener('dragleave', function(){
+            zone.classList.remove('dragover');
+        });
+        zone.addEventListener('drop', function(e){
+            e.preventDefault();
+            zone.classList.remove('dragover');
+            uploadFiles(e.dataTransfer.files);
+        });
+    })();
+
+    // --------------- post-message listener ---------------
+    // Allows the parent window (viewport) to notify the file manager that the
+    // disk was reformatted and it should reset to the root directory.
+    window.addEventListener('message', function(evt) {
+        if (evt.data && evt.data.type === 'dezkvm-format-complete') {
+            navigateTo('/');
+        }
+    });
+
+    // --------------- init ---------------
+    if(!UUID){
+        setStatus('Error: device UUID not provided.');
+        document.getElementById('fm-empty').style.display = 'block';
+        document.getElementById('fm-empty').innerHTML = '<i class="exclamation triangle icon" style="font-size:2em;color:#e07b39"></i><p>No device UUID provided.</p>';
+    } else {
+        navigateTo('/');
+    }
+
+
+})();
+</script>
+</body>
+</html>

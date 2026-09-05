@@ -128,7 +128,13 @@ If your system fail to capture audio output from remote device, or show invalid 
 sudo apt install alsa-utils
 ```
 
-(Or you can just run both before go build, I mean why not? )
+Disk formatting also requires some of the packages to provide support for file system types like exFAT or NTFS if they are not already avaible on your system. 
+
+```
+sudo apt install exfatprogs ntfs-3g
+```
+
+
 
 ### Hardware
 

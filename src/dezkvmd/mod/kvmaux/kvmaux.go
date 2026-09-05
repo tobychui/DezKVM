@@ -53,6 +53,12 @@ func NewAuxOutbandController(portName string, baudRate int) (*AuxMcu, error) {
 }
 
 func (c *AuxMcu) Close() error {
+	//Set LED blink state to slow blink to indicate disconnection
+	c.SetStatusLED(StatusLEDBlinkSlow)
+
+	//Wait a moment to ensure the command is sent before closing the port
+	time.Sleep(100 * time.Millisecond)
+	// Close the serial port
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.port != nil {
