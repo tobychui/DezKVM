@@ -53,10 +53,6 @@ func NewInstance(config *Config) (*Instance, error) {
 
 		//Audio
 		audiostopchan: make(chan bool, 1),
-
-		// Access control
-		videoTakeoverChan: make(chan bool, 1),
-		accessCount:       0,
 	}, nil
 }
 

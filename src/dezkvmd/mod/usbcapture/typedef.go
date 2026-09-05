@@ -2,6 +2,7 @@ package usbcapture
 
 import (
 	"context"
+	"sync"
 
 	"github.com/vladimirvivien/go4vl/device"
 	"github.com/vladimirvivien/go4vl/v4l2"
@@ -22,8 +23,13 @@ type AudioConfig struct {
 }
 
 type VideoConfig struct {
-	UseH264 bool   // Whether to use H264 encoding
-	Profile string // H264 profile, e.g., 480p, 720p, 1080p
+	// MJPEG settings
+	UseJPEGCompression     bool // Whether to use JPEG compression (if not using H264)
+	JPEGCompressionQuality int  // JPEG compression quality (5-80), higher means better quality and larger size
+
+	// H264 settings (WIP)
+	UseH264     bool   // Whether to use H264 encoding
+	H264Profile string // H264 profile, e.g., 480p, 720p, 1080p
 }
 
 type Config struct {
@@ -55,6 +61,11 @@ type Instance struct {
 	audiostopchan    chan bool // Channel to stop audio capture
 
 	/* Concurrent access */
-	accessCount       int       // The number of current access, in theory each instance should at most have 1 access
-	videoTakeoverChan chan bool // Channel to signal video takeover request
+	streamMu             sync.Mutex
+	activeVideoConsumer  *videoConsumer
+}
+
+type videoConsumer struct {
+	takeover chan struct{}
+	done     chan struct{}
 }

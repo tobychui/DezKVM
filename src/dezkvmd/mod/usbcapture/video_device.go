@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
+	"io"
 	"log"
 	"mime/multipart"
 	"net/http"
@@ -171,21 +172,18 @@ func (i *Instance) StartVideoCapture(openWithResolution *CaptureResolution) erro
 
 // start http service
 func (i *Instance) ServeVideoStream(w http.ResponseWriter, req *http.Request) {
-	//Check if the access count is already 1, if so, kick out the previous access
-	if i.accessCount >= 1 {
+	consumer, tookOver := i.beginVideoConsumer()
+	defer i.endVideoConsumer(consumer)
+
+	if tookOver {
 		log.Println("Another client is already connected, kicking out the previous client...")
-		if i.videoTakeoverChan != nil {
-			i.videoTakeoverChan <- true
-		}
 		log.Println("Previous client kicked out, taking over the stream...")
 	}
-	i.accessCount++
 
-	err := i.streamMJPEG(w, req)
+	err := i.streamMJPEG(w, req, consumer)
 	if err != nil {
 		log.Printf("video stream error: %v", err)
 	}
-	i.accessCount--
 }
 
 func isJPEG(frame []byte) bool {
@@ -202,7 +200,7 @@ func isJPEG(frame []byte) bool {
 	return start >= 0 && end > start
 }
 
-func (i *Instance) streamMJPEG(w http.ResponseWriter, req *http.Request) error {
+func (i *Instance) streamMJPEG(w http.ResponseWriter, req *http.Request, consumer *videoConsumer) error {
 	// Set up the multipart response
 	mimeWriter := multipart.NewWriter(w)
 	w.Header().Set("Content-Type", fmt.Sprintf("multipart/x-mixed-replace; boundary=%s", mimeWriter.Boundary()))
@@ -222,7 +220,17 @@ func (i *Instance) streamMJPEG(w http.ResponseWriter, req *http.Request) error {
 
 	// Streaming loop
 	var frame []byte
+	var partWriter io.Writer
+	var err error
 	for frame = range i.frames_buff {
+		select {
+		case <-req.Context().Done():
+			return nil
+		case <-consumer.takeover:
+			return writeTakeoverFrame(mimeWriter)
+		default:
+		}
+
 		// Drain 2 frames every frame if there are buffered frames
 		// This helps in reducing latency when the network is congested
 		select {
@@ -237,18 +245,48 @@ func (i *Instance) streamMJPEG(w http.ResponseWriter, req *http.Request) error {
 		}
 
 		if !isJPEG(frame) {
+			// Corrupted frame, skip it
 			continue
 		}
 
-		partWriter, err := mimeWriter.CreatePart(partHeader)
+		partWriter, err = mimeWriter.CreatePart(partHeader)
 		if err != nil {
 			log.Printf("failed to create multi-part writer: %s", err)
 			return err
 		}
 
-		if _, err := partWriter.Write(frame); err != nil {
+		// Software Frame Compression (experimental)
+		if i.Config.VideoConfig.UseJPEGCompression {
+			img, err := jpeg.Decode(bytes.NewReader(frame))
+			if err != nil {
+				log.Printf("failed to decode JPEG frame: %s", err)
+				continue
+			}
+
+			var buf bytes.Buffer
+			// Tested on 1080p 25fps streaming playing youtube
+			// Not re-encoded -> 56Mbps
+			// Quality: 100 -> 81 Mbps
+			// Quality: 75 -> 30Mbps
+			// Quality: 50 -> 24Mbps
+			// Quality: 30 -> 20Mbps
+			// Quality: 10 -> 12Mbps
+			err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: i.Config.VideoConfig.JPEGCompressionQuality})
+			if err != nil {
+				log.Printf("failed to re-encode JPEG frame: %s", err)
+				continue
+			}
+			frame = buf.Bytes()
+
+		}
+
+		if _, err = partWriter.Write(frame); err != nil {
 			if errors.Is(err, syscall.EPIPE) {
 				//broken pipe, the client browser has exited
+				return nil
+			}
+			if errors.Is(err, http.ErrAbortHandler) {
+				//TODO: properly handle client exit
 				return nil
 			}
 			log.Printf("failed to write image: %s", err)
@@ -263,24 +301,28 @@ func (i *Instance) streamMJPEG(w http.ResponseWriter, req *http.Request) error {
 		case <-req.Context().Done():
 			// Client disconnected, exit the loop
 			return nil
-		case <-i.videoTakeoverChan:
+		case <-consumer.takeover:
 			// Another client is taking over, exit the loop
-
-			//Send the endofstream.jpg as last frame before exit
-			endFrameHeader := make(textproto.MIMEHeader)
-			endFrameHeader.Add("Content-Type", "image/jpeg")
-			endFrameHeader.Add("Content-Length", fmt.Sprint(len(endOfStreamJPG)))
-			partWriter, err := mimeWriter.CreatePart(endFrameHeader)
-			if err == nil {
-				partWriter.Write(endOfStreamJPG)
-			}
-			log.Println("Video stream taken over by another client, exiting...")
-			return nil
+			return writeTakeoverFrame(mimeWriter)
 		default:
 			// Continue streaming
 		}
 
 	}
+	return nil
+}
+
+func writeTakeoverFrame(mimeWriter *multipart.Writer) error {
+	endFrameHeader := make(textproto.MIMEHeader)
+	endFrameHeader.Add("Content-Type", "image/jpeg")
+	endFrameHeader.Add("Content-Length", fmt.Sprint(len(endOfStreamJPG)))
+	partWriter, err := mimeWriter.CreatePart(endFrameHeader)
+	if err == nil {
+		if _, writeErr := partWriter.Write(endOfStreamJPG); writeErr != nil {
+			return writeErr
+		}
+	}
+	log.Println("Video stream taken over by another client, exiting...")
 	return nil
 }
 
@@ -422,6 +464,7 @@ func GetV4L2FormatInfo(devicePath string) ([]FormatInfo, error) {
 	// Parse the output
 	var formats []FormatInfo
 	var currentFormat *FormatInfo
+	var currentSize *SizeInfo
 	scanner := bufio.NewScanner(&out)
 
 	formatRegex := regexp.MustCompile(`\[(\d+)\]: '(\S+)'`)
@@ -440,33 +483,28 @@ func GetV4L2FormatInfo(devicePath string) ([]FormatInfo, error) {
 			currentFormat = &FormatInfo{
 				Format: matches[2],
 			}
+			currentSize = nil
+			continue
 		}
 
 		// Match size line
-		if matches := sizeRegex.FindStringSubmatch(line); matches != nil {
+		if matches := sizeRegex.FindStringSubmatch(line); matches != nil && currentFormat != nil {
 			width, _ := strconv.Atoi(matches[1])
 			height, _ := strconv.Atoi(matches[2])
 
-			// Initialize the size entry
-			sizeInfo := SizeInfo{
+			// Add a new size entry to the current format and track it
+			currentFormat.Sizes = append(currentFormat.Sizes, SizeInfo{
 				Width:  width,
 				Height: height,
-			}
+			})
+			currentSize = &currentFormat.Sizes[len(currentFormat.Sizes)-1]
+			continue
+		}
 
-			// Match FPS intervals for the current size
-			for scanner.Scan() {
-				line = scanner.Text()
-
-				if fpsMatches := intervalRegex.FindStringSubmatch(line); fpsMatches != nil {
-					fps, _ := strconv.ParseFloat(fpsMatches[2], 32)
-					sizeInfo.FPS = append(sizeInfo.FPS, int(fps))
-				} else {
-					// Stop parsing FPS intervals when no more matches are found
-					break
-				}
-			}
-			// Add the size information to the current format
-			currentFormat.Sizes = append(currentFormat.Sizes, sizeInfo)
+		// Match FPS interval line for the current size
+		if matches := intervalRegex.FindStringSubmatch(line); matches != nil && currentSize != nil {
+			fps, _ := strconv.ParseFloat(matches[2], 32)
+			currentSize.FPS = append(currentSize.FPS, int(fps))
 		}
 	}
 
