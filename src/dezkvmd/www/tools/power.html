@@ -1,0 +1,91 @@
+<!--
+    tools/power.html
+    Power Control tool panel — ATX front-panel button simulation with live
+    LED status. Ajax-loaded into a DezWindow inside viewport.html; uses
+    viewport globals (kvmDeviceUUID, $, $.toast).
+-->
+<div class="dez-tool-panel" id="tool-power">
+    <div class="tool-status-card">
+        <div class="tool-kv">
+            <span class="k">Power LED</span>
+            <span class="v"><span class="status-dot" id="pw-led-power" style="width:9px;height:9px;border-radius:50%;background:#c9c9ce;display:inline-block;"></span> <span id="pw-led-power-text">unknown</span></span>
+        </div>
+        <div class="tool-kv">
+            <span class="k">HDD LED</span>
+            <span class="v"><span class="status-dot" id="pw-led-hdd" style="width:9px;height:9px;border-radius:50%;background:#c9c9ce;display:inline-block;"></span> <span id="pw-led-hdd-text">unknown</span></span>
+        </div>
+    </div>
+    <div class="tool-row">
+        <button class="ui basic green button" style="flex:1;" onclick="pwTrigger('power_click', this, false)">
+            <i class="power off icon"></i> Power
+        </button>
+        <button class="ui basic orange button" style="flex:1;" onclick="pwTrigger('reset_click', this, true)">
+            <i class="redo icon"></i> Reset
+        </button>
+        <button class="ui basic red button" style="flex:1;" onclick="pwTrigger('power_hold', this, true)">
+            <i class="plug icon"></i> Force Off
+        </button>
+    </div>
+    <p class="tool-desc" style="margin:0.4em 0 0;">
+        Power = short press (start / soft shutdown). Force Off holds the power
+        button for 6 seconds. Reset and Force Off need a confirming second click.
+    </p>
+</div>
+<script>
+(function () {
+    function setLed(dotId, textId, on) {
+        const dot = document.getElementById(dotId);
+        const text = document.getElementById(textId);
+        if (!dot || !text) return;
+        dot.style.background = on ? 'var(--dez-green)' : '#c9c9ce';
+        text.textContent = on ? 'on' : 'off';
+    }
+
+    window.pwRefreshState = function () {
+        $.get('/api/v1/atx/' + kvmDeviceUUID + '/state', function (state) {
+            setLed('pw-led-power', 'pw-led-power-text', !!state.power_led);
+            setLed('pw-led-hdd', 'pw-led-hdd-text', !!state.hdd_led);
+        }).fail(function () {
+            $('#pw-led-power-text, #pw-led-hdd-text').text('unavailable');
+        });
+    };
+
+    window.pwTrigger = function (action, btn, needConfirm) {
+        if (needConfirm && !btn.dataset.armed) {
+            btn.dataset.armed = '1';
+            btn.dataset.origHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="warning icon"></i> Confirm?';
+            setTimeout(function () {
+                delete btn.dataset.armed;
+                if (btn.dataset.origHtml) btn.innerHTML = btn.dataset.origHtml;
+            }, 4000);
+            return;
+        }
+        if (needConfirm) {
+            delete btn.dataset.armed;
+            btn.innerHTML = btn.dataset.origHtml;
+        }
+
+        const csrf = document.querySelector('meta[name="dezkvm.csrf.token"]');
+        btn.classList.add('loading', 'disabled');
+        $.ajax({
+            url: '/api/v1/atx/' + kvmDeviceUUID + '/trigger',
+            method: 'POST',
+            contentType: 'application/json',
+            headers: { 'dezkvm_csrf_token': csrf ? csrf.getAttribute('content') : '' },
+            data: JSON.stringify({ action: action }),
+            success: function () {
+                btn.classList.remove('loading', 'disabled');
+                $.toast({ message: '<i class="green check icon"></i> Done', duration: 3000 });
+                setTimeout(pwRefreshState, 1500);
+            },
+            error: function (xhr) {
+                btn.classList.remove('loading', 'disabled');
+                $.toast({ class: 'error', message: 'ATX action failed: ' + (xhr.responseText || ''), duration: 5000 });
+            }
+        });
+    };
+
+    pwRefreshState();
+})();
+</script>
