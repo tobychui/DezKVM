@@ -73,26 +73,58 @@ function updatePasteBoxCharCounter() {
 }
 
 function showPasteBox() {
-    const pasteBox = document.getElementById('pasteBox');
-    const textarea = document.getElementById('pasteTextarea');
-    pasteBox.style.display = 'flex';
+    // Already open: just focus it
+    const existing = (typeof DezWindow !== 'undefined') ? DezWindow.get('tool-clipboard') : null;
+    if (existing) {
+        existing.focus();
+        document.getElementById('pasteTextarea').focus();
+        return;
+    }
+
+    const content = document.getElementById('pasteBoxContent');
+    if (!content) {
+        console.error('Clipboard tool content not loaded');
+        return;
+    }
+
+    // Move the content out of the hidden #pasteBox parking container into a
+    // draggable floating window. On close it is parked back so the element
+    // (and any typed text) survives for the next open.
+    DezWindow({
+        id: 'tool-clipboard',
+        title: 'Clipboard',
+        icon: '/img/icons/clipboard.svg',
+        width: 520,
+        content: content,
+        onClose: function () {
+            const parking = document.getElementById('pasteBox');
+            if (parking && content) parking.appendChild(content);
+            pasteBoxActive = false;
+            pauseAllKeyEvents = false;
+            // Re-attach document key events
+            document.addEventListener('keydown', handleKeyDown);
+            document.addEventListener('keyup', handleKeyUp);
+        }
+    });
+
     pasteBoxActive = true;
-    pausePasteCapture = true;
-    textarea.focus();
+    pauseAllKeyEvents = true;
+    document.getElementById('pasteTextarea').focus();
     updatePasteBoxCharCounter();
-    
+
     // Prevent document key events when paste box is active
     document.removeEventListener('keydown', handleKeyDown);
     document.removeEventListener('keyup', handleKeyUp);
 }
 
 function closePasteBox() {
-    const pasteBox = document.getElementById('pasteBox');
-    pasteBox.style.display = 'none';
+    const win = (typeof DezWindow !== 'undefined') ? DezWindow.get('tool-clipboard') : null;
+    if (win) {
+        win.close(); // onClose handler parks the content + restores key events
+        return;
+    }
     pasteBoxActive = false;
-    pausePasteCapture = false;
-    
-    // Re-attach document key events
+    pauseAllKeyEvents = false;
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('keyup', handleKeyUp);
 }

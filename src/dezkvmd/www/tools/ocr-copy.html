@@ -1,0 +1,57 @@
+<!--
+    tools/ocr-copy.html
+    OCR Copy tool panel — starts the on-screen region selector from
+    js/ocr-copy.js. Ajax-loaded into a DezWindow inside viewport.html.
+-->
+<div class="dez-tool-panel" id="tool-ocr-copy">
+    <p class="tool-desc">
+        Select an area of the remote screen and recognize the text in it so it
+        can be copied to your local clipboard. For CJK languages, spurious
+        spaces are removed automatically.
+    </p>
+    <div class="tool-row">
+        <label style="font-size:0.9em;color:var(--dez-text-sub);">Language</label>
+        <select id="ocr-tool-lang" style="flex:1;"></select>
+    </div>
+    <div class="tool-row" style="justify-content:flex-end;">
+        <button class="ui primary button" onclick="ocrToolStart()">
+            <i class="i cursor icon"></i> Start Selection
+        </button>
+    </div>
+    <p class="tool-desc" style="margin:0.4em 0 0;">
+        Tip: enable “Direct OCR to clipboard” in Settings &rarr; Keyboard to
+        skip the result window.
+    </p>
+</div>
+<script>
+(function () {
+    // Populate languages from the registry in js/ocr-copy.js
+    const sel = document.getElementById('ocr-tool-lang');
+    if (typeof SUPPORTED_LANGUAGES !== 'undefined') {
+        SUPPORTED_LANGUAGES.forEach(function (lang) {
+            const opt = document.createElement('option');
+            opt.value = lang.code;
+            opt.textContent = lang.name;
+            if (typeof ocrState !== 'undefined' && ocrState.selectedLanguage === lang.code) {
+                opt.selected = true;
+            }
+            sel.appendChild(opt);
+        });
+    }
+
+    window.ocrToolStart = function () {
+        if (typeof ocrState !== 'undefined') {
+            ocrState.selectedLanguage = sel.value;
+        }
+        // Remember the language so the confirm popup / future sessions
+        // don't ask again
+        localStorage.setItem('dezkvm.ocr.lang', sel.value);
+        // Close this tool window so it does not cover the selection overlay
+        const win = DezWindow.get('tool-ocr-copy');
+        if (win) win.close();
+        if (typeof showScreenshotSelector === 'function') {
+            showScreenshotSelector();
+        }
+    };
+})();
+</script>

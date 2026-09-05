@@ -1,10 +1,11 @@
-<div class="paste-box-content">
-    <div class="paste-box-header">
-        <h3>Paste Text to Remote Computer</h3>
-        <button class="ui mini icon button" onclick="closePasteBox()" title="Close">
-            <i class="close icon"></i>
-        </button>
-    </div>
+<!--
+    tools/clipboard.html
+    Clipboard (paste box) tool — lets the user type or paste text and have it
+    sent to the remote computer as keystrokes. Loaded into the hidden
+    #pasteBox parking container at viewport boot; showPasteBox() (paste-box.js)
+    moves the content into a draggable DezWindow.
+-->
+<div id="pasteBoxContent" class="paste-box-content">
     <div class="paste-box-body">
         <textarea id="pasteTextarea" placeholder="Paste or type text here. Only alphanumeric characters (a-z, A-Z, 0-9) and basic symbols will be sent." maxlength="1000" oninput="updatePasteBoxCharCounter()"></textarea>
         <div class="paste-char-counter">
@@ -17,8 +18,8 @@
         </div>
     </div>
     <div class="paste-box-footer">
-        <button class="ui basic button" id="btnSendPaste" onclick="sendPasteText()">
-            <i class="blue keyboard icon"></i>
+        <button class="ui primary button" id="btnSendPaste" onclick="sendPasteText()">
+            <i class="keyboard icon"></i>
             Send to Remote
         </button>
         <button class="ui basic button" id="btnClearPaste" onclick="clearPasteBox()">
