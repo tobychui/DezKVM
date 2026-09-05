@@ -3,6 +3,7 @@ package kvmhid
 import (
 	"errors"
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -188,9 +189,11 @@ func (c *Controller) ChipSoftReset() error {
 		return errors.New("failed to get reply")
 	}
 
-	fmt.Println("Chip soft reset successfully")
+	log.Println("Chip soft reset successfully, releasing all modifier keys to ensure clean state")
 	return nil
 }
+
+
 
 func (c *Controller) IsModifierKeys(keycode int) bool {
 	// Modifier keycodes for JavaScript
@@ -281,7 +284,15 @@ func (c *Controller) ConstructAndSendCmd(HIDCommand *HIDCommand) ([]byte, error)
 		c.lastCursorEventTime = time.Now().UnixMilli()
 		return c.MouseScroll(HIDCommand.MouseScroll)
 	case EventTypeHIDReset:
-		return []byte{}, c.ChipSoftReset()
+		err := c.ChipSoftReset()
+		if err != nil {
+			return nil, fmt.Errorf("failed to reset chip: %v", err)
+		}
+		err = c.UnsetModifierKeysWithRetry(5)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unset modifier keys: %v", err)
+		}
+		return []byte{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported HID command event type: %d", HIDCommand.Event)
 	}

@@ -79,11 +79,9 @@ func (c *Controller) Connect() error {
 		}
 	}()
 
-	//Send over an opr queue reset signal
-	err = c.Send([]byte{0xFF})
-	if err != nil {
-		return err
-	}
+	// Not all remote machines are on at the time of hid initiation
+	// we can safely ignore the error here
+	c.ChipSoftReset()
 
 	return nil
 }

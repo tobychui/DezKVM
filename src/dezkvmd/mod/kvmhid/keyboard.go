@@ -1,6 +1,8 @@
 package kvmhid
 
 import "errors"
+import "time"
+import "log"
 
 const (
 	MOD_LCTRL  = 0x01
@@ -103,6 +105,65 @@ func (c *Controller) UnsetModifierKey(keycode uint8, isRight bool) ([]byte, erro
 
 	c.hidState.Modkey &^= modifierBit
 	return keyboardSendKeyCombinations(c)
+}
+
+// UnsetAllModifierKeys releases all modifier keys (Shift, Ctrl, Alt, GUI)
+func (c *Controller) UnsetAllModifierKeys() error {
+	var err error
+	_, err = c.UnsetModifierKey(16, false) // Left Shift
+	if err != nil {
+		return err
+	}
+	_, err = c.UnsetModifierKey(16, true)
+	if err != nil {
+		return err
+	}
+	_, err = c.UnsetModifierKey(17, false) // Left Ctrl
+	if err != nil {
+		return err
+	}
+	_, err = c.UnsetModifierKey(17, true)
+	if err != nil {
+		return err
+	}
+	_, err = c.UnsetModifierKey(18, false) // Left Alt
+	if err != nil {
+		return err
+	}
+	_, err = c.UnsetModifierKey(18, true)
+	if err != nil {
+		return err
+	}
+	_, err = c.UnsetModifierKey(91, false) // Left GUI
+	if err != nil {
+		return err
+	}
+	_, err = c.UnsetModifierKey(91, true)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// UnsetModifierKeysWithRetry attempts to release all modifier keys with retries in case of failure
+// which commonly happens if this is called after Chip soft reset
+func (c *Controller) UnsetModifierKeysWithRetry(maxRetryCount int) error{
+	var err error
+	retryCount := 0
+	succ := false
+	for(succ == false && retryCount < maxRetryCount) {
+		err = c.UnsetAllModifierKeys()
+		if err != nil {
+			retryCount++
+			time.Sleep(1 * time.Second) // Wait before retrying
+		} else {
+			succ = true
+		}
+	}
+	if !succ {
+		log.Printf("Error unsetting modifier keys: %v\n", err)
+	}
+	return nil
 }
 
 // SendKeyboardPress sends a keyboard press by JavaScript keycode
