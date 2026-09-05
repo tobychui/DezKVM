@@ -8,8 +8,9 @@
         <meta name="theme-color" content="#4b75ff">
         <link rel="icon" type="image/png" href="/favicon.png">
         <script src="js/jquery-3.7.1.min.js"></script>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/semantic.min.css" integrity="sha512-ySrYzxj+EI1e9xj/kRYqeDL5l1wW0IWY8pzHNTIZ+vc1D3Z14UDNPbwup4yOUmlRemYjgUXsUZ/xvCQU2ThEAw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/semantic.min.js" integrity="sha512-Y/wIVu+S+XJsDL7I+nL50kAVFLMqSdvuLqF2vMoRqiMkmvcqFjEpEgeu6Rx8tpZXKp77J8OUpMKy0m3jLYhbbw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/components/icon.min.css" integrity="sha512-TWRDyIVIf+vAIJPt6vRyjyJLwZJizD8OGF3x9ZKsGNW6DejvY+1B9x+aN86SND5ziDzbei41I+LfaZpF59j1aA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <link rel="stylesheet" href="/css/dez-ui.css">
+        <script src="/js/dez-ui.js"></script>
         <title>Terminal | DezKVM</title>
 
         <style>
@@ -37,12 +38,9 @@
 
             #terminalFrame {
                 position: fixed;
-                top: 5em;
-                left: 5em;
-                right: 5em;
-                bottom: 5em;
-                width: calc(100% - 10em);
-                height: calc(100% - 10em);
+                inset: 0;
+                width: 100%;
+                height: 100%;
                 border: none;
                 display: none;
             }
@@ -145,6 +143,9 @@
             if (window.location.hash.length > 1){
                 try{
                     var c = JSON.parse(decodeURIComponent((window.location.hash.substr(1))));
+                    // Auto-connect mode (launched from the Terminal Manager):
+                    // hide the built-in connection form entirely.
+                    $('#connectionSettings').hide();
                     $('input[name="server"]').val(c.server);
                     $('input[name="port"]').val(c.port);
                     $('input[name="username"]').val(c.username);
@@ -194,7 +195,7 @@
                     portString = "22";
                 }
                 const portValue = parseInt(portString, 10);
-                const username = $('input[name="username"]').val().trim();
+                let username = $('input[name="username"]').val().trim();
                 if (username == ""){
                     username = "root";
                 }

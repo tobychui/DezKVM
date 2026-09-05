@@ -1,0 +1,82 @@
+/*
+    toolbox.css — floating Tools shortcut box shown inside the session
+    viewport, plus shared styling for the ajax-loaded tool panels under
+    /tools/. Windows themselves use the .dez-window chrome from dez-ui.css.
+*/
+
+.dez-toolbox-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    padding: 14px;
+}
+
+.dez-toolbox-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    background: var(--dez-surface);
+    border: 1px solid var(--dez-border);
+    border-radius: var(--dez-radius);
+    padding: 14px 6px 10px;
+    cursor: pointer;
+    font-family: var(--dez-font);
+    transition: background 0.12s, border-color 0.12s, transform 0.12s;
+}
+.dez-toolbox-item:hover {
+    background: var(--dez-surface-2);
+    border-color: var(--dez-border-strong);
+    transform: translateY(-1px);
+}
+.dez-toolbox-item img {
+    width: 26px;
+    height: 26px;
+}
+.dez-toolbox-item span {
+    font-size: 0.74em;
+    color: var(--dez-text);
+    text-align: center;
+    line-height: 1.2;
+}
+
+.dez-toolbox-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: var(--dez-text-sub);
+    font-size: 0.85em;
+    padding: 14px 8px;
+}
+
+/* ------------------------------ shared styles for tool panels (/tools/) */
+.dez-tool-panel { font-size: 0.95em; }
+.dez-tool-panel .tool-desc {
+    color: var(--dez-text-sub);
+    font-size: 0.9em;
+    margin: 0 0 1em;
+}
+.dez-tool-panel .tool-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    flex-wrap: wrap;
+    margin-bottom: 0.8em;
+}
+.dez-tool-panel .tool-status-card {
+    background: var(--dez-surface-2);
+    border: 1px solid var(--dez-border);
+    border-radius: var(--dez-radius-sm);
+    padding: 0.8em 1em;
+    margin-bottom: 1em;
+}
+.dez-tool-panel .tool-kv {
+    display: flex;
+    justify-content: space-between;
+    gap: 1em;
+    padding: 0.45em 0;
+    border-bottom: 1px solid var(--dez-border);
+    font-size: 0.92em;
+}
+.dez-tool-panel .tool-kv:last-child { border-bottom: none; }
+.dez-tool-panel .tool-kv .k { color: var(--dez-text-sub); flex-shrink: 0; }
+.dez-tool-panel .tool-kv .v { text-align: right; word-break: break-all; }

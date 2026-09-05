@@ -1,0 +1,667 @@
+/*
+    dez-ui.css
+
+    DezKVM shared UI kit. Replaces the Fomantic-UI framework with a small
+    custom design system matching the DezKVM design elements (light, rounded cards,
+    SF-style). The class names of the old Fomantic components (.ui.button,
+    .ui.modal, .ui.progress, ...) are intentionally re-implemented here so the
+    existing markup keeps working; the matching JS behaviours live in
+    js/dez-ui.js.
+
+    Icons: glyph icons (<i class="... icon">) are provided by the standalone
+    Fomantic icon component (icon font only, no framework). New UI chrome uses
+    SVG files from /img/icons/ instead.
+*/
+
+:root {
+    --dez-bg: #f4f5f7;
+    --dez-surface: #ffffff;
+    --dez-surface-2: #f7f7f9;
+    --dez-serface-3: #f5f5f5;
+    --dez-border: #e3e5e8;
+    --dez-border-strong: #d3d5d9;
+    --dez-text: #1c1c1e;
+    --dez-text-2: #333;
+    --dez-text-sub: #86868b;
+    --dez-text-sub2: #9a9aa2;
+    --dez-accent: #2b6ef2;
+    --dez-accent-soft: #e8f0fe;
+    --dez-green: #34a853;
+    --dez-red: #e03d3d;
+    --dez-orange: #f2994a;
+    --dez-teal: #12a5a5;
+    --dez-radius: 12px;
+    --dez-radius-sm: 8px;
+    --dez-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+    --dez-shadow-lg: 0 16px 50px rgba(0, 0, 0, 0.22);
+    --dez-font: -apple-system, BlinkMacSystemFont, "inter", system-ui, "Helvetica Neue", Arial, sans-serif;
+}
+
+
+
+@font-face {
+    font-family: "inter";
+    src: url("./inter/Inter-VariableFont_opsz,wght.ttf") format("truetype");
+    font-weight: 300 700; 
+    font-style: normal;
+    font-display: swap;
+}
+
+
+/* ---------------------------------------------------------------- base */
+* { box-sizing: border-box; }
+
+body{
+    /* set default font styles for relative ref */
+    font-family: var(--dez-font);
+    font-weight: lighter;
+    font-size: 14px;
+    color: var(--dez-text);
+
+     /* Details override */
+    --dez-setting-catergory-menu-item-text: #444;
+}
+
+body.dez {
+    margin: 0;
+    padding: 0;
+    background: var(--dez-bg);
+    color: var(--dez-text);
+    font-family: var(--dez-font);
+    font-optical-sizing: auto;
+    font-size: 14px;
+}
+
+
+body.dez-dark {
+    --dez-bg: #161618;
+    --dez-surface: #232326;
+    --dez-surface-2: #2b2b2f;
+    --dez-serface-3: #2a2a2e;
+    --dez-border: #3a3a3f;
+    --dez-border-strong: #4a4a50;
+    --dez-text: #ececf0;
+    --dez-text-2: #ececec;
+    --dez-text-sub: #9a9aa2;
+    --dez-text-sub2: #9a9aa2;
+    --dez-accent: #4f83ec;
+    --dez-accent-soft: #223550;
+    
+    /* Details override */
+    --dez-setting-catergory-menu-item-text: #ececf0;
+    
+    
+    background: var(--dez-bg);
+    color: var(--dez-text);
+}
+
+.dez-hidden { display: none !important; }
+
+img.dez-icon {
+    width: 18px;
+    height: 18px;
+    display: inline-block;
+    vertical-align: middle;
+    pointer-events: none;
+}
+
+/* ------------------------------------------------------------- buttons */
+.ui.button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45em;
+    font-family: var(--dez-font);
+    font-size: 0.95em;
+    font-weight: 500;
+    color: var(--dez-text);
+    background: var(--dez-surface);
+    border: 1px solid var(--dez-border-strong);
+    border-radius: var(--dez-radius-sm);
+    padding: 0.55em 1em;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, opacity 0.12s;
+    line-height: 1.2;
+    text-decoration: none;
+}
+.ui.button:hover { background: var(--dez-surface-2); border-color: #c4c7cc; }
+.ui.button:active { background: #ededf0; }
+.ui.button.mini  { font-size: 0.8em;  padding: 0.45em 0.8em; }
+.ui.button.small { font-size: 0.88em; padding: 0.5em 0.9em; }
+.ui.button.fluid { display: flex; width: 100%; }
+.ui.button.circular { border-radius: 999px; }
+.ui.button.icon { padding: 0.5em 0.4em; }
+.ui.button i.icon { margin: 0 !important; }
+
+/* colour variants (both solid and "basic" outline forms) */
+.ui.primary.button, .ui.blue.button, .ui.teal.button, .ui.green.button,
+.ui.red.button, .ui.orange.button, .ui.secondary.button, .ui.black.button {
+    color: #fff;
+    border-color: transparent;
+}
+.ui.primary.button, .ui.blue.button { background: var(--dez-accent); }
+.ui.primary.button:hover, .ui.blue.button:hover { background: #2360d8; }
+.ui.teal.button   { background: var(--dez-teal); }
+.ui.teal.button:hover { background: #0e8f8f; }
+.ui.green.button  { background: var(--dez-green); }
+.ui.green.button:hover { background: #2c9247; }
+.ui.red.button    { background: var(--dez-red); }
+.ui.red.button:hover { background: #c73434; }
+.ui.orange.button { background: var(--dez-orange); }
+.ui.orange.button:hover { background: #dd8637; }
+.ui.secondary.button, .ui.black.button { background: #2c2c2e; }
+.ui.secondary.button:hover, .ui.black.button:hover { background: #1c1c1e; }
+
+.ui.basic.button {
+    background: transparent !important;
+    color: var(--dez-text);
+    border: 1px solid var(--dez-border-strong);
+}
+.ui.basic.button:hover { background: var(--dez-surface-2) !important; }
+.ui.basic.blue.button   { color: var(--dez-accent); border-color: var(--dez-accent); }
+.ui.basic.teal.button   { color: var(--dez-teal);   border-color: var(--dez-teal); }
+.ui.basic.green.button  { color: var(--dez-green);  border-color: var(--dez-green); }
+.ui.basic.red.button    { color: var(--dez-red);    border-color: var(--dez-red); }
+.ui.basic.orange.button { color: var(--dez-orange); border-color: var(--dez-orange); }
+.ui.basic.purple.button { color: #8e44ad; border-color: #8e44ad; }
+.ui.basic.black.button  { color: var(--dez-text); }
+.ui.inverted.button { color: #fff; border-color: rgba(255,255,255,0.6); background: transparent; }
+
+.ui.button.disabled, .ui.button:disabled {
+    opacity: 0.45;
+    pointer-events: none;
+}
+.ui.button.loading { position: relative; color: transparent !important; pointer-events: none; }
+.ui.button.loading::after {
+    content: "";
+    position: absolute;
+    width: 1em; height: 1em;
+    top: 50%; left: 50%;
+    margin: -0.5em 0 0 -0.5em;
+    border: 2px solid rgba(0,0,0,0.25);
+    border-top-color: rgba(0,0,0,0.7);
+    border-radius: 50%;
+    animation: dez-spin 0.7s linear infinite;
+}
+
+.ui.buttons { display: inline-flex; }
+.ui.buttons .ui.button { border-radius: 0; }
+.ui.buttons .ui.button:first-child { border-radius: var(--dez-radius-sm) 0 0 var(--dez-radius-sm); }
+.ui.buttons .ui.button:last-child { border-radius: 0 var(--dez-radius-sm) var(--dez-radius-sm) 0; }
+.ui.buttons .or { display: none; }
+.ui.buttons .ui.button.active {
+    background: var(--dez-accent-soft);
+    color: var(--dez-accent);
+    border-color: var(--dez-accent);
+    position: relative;
+    z-index: 1;
+}
+
+/* ------------------------------------------------------------- inputs */
+.ui.input { display: inline-flex; width: auto; }
+.ui.input.fluid, .ui.fluid.input { display: flex; width: 100%; }
+.ui.input > input { width: 100%; }
+
+/* input with an attached button (e.g. login password reveal) */
+.ui.action.input { display: flex; }
+.ui.action.input > input { flex: 1; border-radius: var(--dez-radius-sm) 0 0 var(--dez-radius-sm); border-right: none; }
+.ui.action.input > .ui.button { border-radius: 0 var(--dez-radius-sm) var(--dez-radius-sm) 0; }
+
+input[type="text"], input[type="password"], input[type="number"], textarea, .ui.input > input {
+    font-family: var(--dez-font);
+    font-size: 0.95em;
+    color: var(--dez-text);
+    background: var(--dez-surface);
+    border: 1px solid var(--dez-border-strong);
+    border-radius: var(--dez-radius-sm);
+    padding: 0.55em 0.75em;
+    outline: none;
+    transition: border-color 0.12s, box-shadow 0.12s;
+}
+input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus, textarea:focus {
+    border-color: var(--dez-accent);
+    box-shadow: 0 0 0 3px rgba(43, 110, 242, 0.15);
+}
+
+select, select.ui.dropdown {
+    font-family: var(--dez-font);
+    font-size: 0.95em;
+    color: var(--dez-text);
+    background: var(--dez-surface);
+    border: 1px solid var(--dez-border-strong);
+    border-radius: var(--dez-radius-sm);
+    padding: 0.5em 0.7em;
+    outline: none;
+    cursor: pointer;
+}
+select.ui.fluid.dropdown { width: 100%; }
+select:focus { border-color: var(--dez-accent); }
+
+/* ------------------------------------------------------- toggle switch */
+.ui.checkbox, .ui.toggle.checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6em;
+    cursor: pointer;
+    position: relative;
+}
+.ui.checkbox label, .ui.toggle.checkbox label { cursor: pointer; color: var(--dez-text); }
+
+.ui.toggle.checkbox input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 40px;
+    height: 23px;
+    border-radius: 999px;
+    background: #d5d5da;
+    position: relative;
+    cursor: pointer;
+    outline: none;
+    transition: background 0.15s;
+    margin: 0;
+    flex-shrink: 0;
+}
+.ui.toggle.checkbox input[type="checkbox"]::after {
+    content: "";
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 19px; height: 19px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    transition: left 0.15s;
+}
+.ui.toggle.checkbox input[type="checkbox"]:checked { background: var(--dez-green); }
+.ui.toggle.checkbox input[type="checkbox"]:checked::after { left: 19px; }
+
+/* plain (non-toggle) checkboxes keep the native look, enlarged slightly */
+.ui.checkbox:not(.toggle) input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+
+/* ------------------------------------------------------------ sliders */
+.dez-slider { display: flex; align-items: center; gap: 0.8em; max-width: 420px; }
+.dez-slider input[type="range"] {
+    flex: 1;
+    appearance: none;
+    -webkit-appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: #d5d5da;
+    outline: none;
+    cursor: pointer;
+}
+.dez-slider input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    border: 1px solid var(--dez-border-strong);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+    cursor: pointer;
+}
+.dez-slider .dez-slider-value {
+    min-width: 2em;
+    text-align: center;
+    font-weight: 600;
+    color: var(--dez-text);
+    background: var(--dez-surface-2);
+    border: 1px solid var(--dez-border);
+    border-radius: 6px;
+    padding: 0.15em 0.4em;
+    font-size: 0.9em;
+}
+
+/* ----------------------------------------------------------- progress */
+.ui.progress {
+    background: #e8e8ec;
+    border-radius: 999px;
+    overflow: hidden;
+    height: 10px;
+    position: relative;
+    margin: 0.5em 0;
+}
+.ui.progress .bar {
+    background: var(--dez-accent);
+    height: 100%;
+    width: 0%;
+    border-radius: 999px;
+    transition: width 0.25s ease;
+    position: relative;
+}
+.ui.progress.indicating .bar { background: var(--dez-green); }
+.ui.progress .bar .progress { display: none; }
+.ui.progress .label {
+    position: static;
+    display: block;
+    margin-top: 0.45em;
+    font-size: 0.85em;
+    color: var(--dez-text-sub);
+    text-align: left;
+}
+.ui.progress.small { height: 8px; }
+
+/* ------------------------------------------------------------- modals */
+.dez-dimmer {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 10, 12, 0.45);
+    z-index: 3000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+.dez-dimmer.active { display: flex; }
+
+.ui.modal {
+    display: none;
+    background: var(--dez-surface);
+    border-radius: var(--dez-radius);
+    box-shadow: var(--dez-shadow-lg);
+    width: min(92vw, 560px);
+    max-height: 88vh;
+    overflow-y: auto;
+    z-index: 3001;
+    font-size: 14px;
+    border: 1px solid var(--dez-border);
+}
+.ui.modal.active { display: block; }
+.ui.tiny.modal { width: min(92vw, 400px); }
+.ui.small.modal { width: min(92vw, 500px); }
+.ui.modal > .header {
+    font-size: 1.05em;
+    font-weight: 600;
+    padding: 1em 1.3em;
+    border-bottom: 1px solid var(--dez-border);
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+}
+.ui.modal > .content { padding: 1.2em 1.3em; }
+.ui.modal > .actions {
+    padding: 0.9em 1.3em;
+    border-top: 1px solid var(--dez-border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5em;
+    background: var(--dez-surface-2);
+    border-radius: 0 0 var(--dez-radius) var(--dez-radius);
+}
+
+/* -------------------------------------------------------------- toast */
+#dez-toast-region {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 5000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: min(90vw, 380px);
+    font-family: -apple-system, "inter", system-ui, "Helvetica Neue", Arial, sans-serif;
+}
+.toast-box {
+    background: var(--dez-surface);
+    color: var(--dez-text);
+    border: 1px solid var(--dez-border);
+    border-radius: var(--dez-radius-sm);
+    box-shadow: var(--dez-shadow);
+    padding: 0.8em 1em;
+    font-size: 0.92em;
+    animation: dez-toast-in 0.18s ease;
+    word-break: break-word;
+}
+.toast-box.error, .toast-box.red { border-left: 4px solid var(--dez-red); }
+.toast-box.success, .toast-box.green { border-left: 4px solid var(--dez-green); }
+.toast-box.warning { border-left: 4px solid var(--dez-orange); }
+.toast-box .toast-actions {
+    display: flex;
+    gap: 0.5em;
+    margin-top: 0.7em;
+    justify-content: flex-end;
+}
+@keyframes dez-toast-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ----------------------------------------------------- floating window */
+.dez-window {
+    position: fixed;
+    background: rgba(250, 250, 252, 0.96);
+    backdrop-filter: blur(14px);
+    border: 1px solid var(--dez-border);
+    border-radius: var(--dez-radius);
+    box-shadow: var(--dez-shadow-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 2500;
+    min-width: 240px;
+    min-height: 120px;
+}
+.dez-window.focused { border-color: var(--dez-border-strong); }
+.dez-window-header {
+    display: flex;
+    align-items: center;
+    gap: 0.55em;
+    padding: 0.6em 0.9em;
+    cursor: move;
+    user-select: none;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--dez-border);
+    background: rgba(255, 255, 255, 0.65);
+}
+.dez-window-header .dez-window-title {
+    font-weight: 600;
+    font-size: 0.95em;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.dez-window-header img.dez-icon { width: 16px; height: 16px; }
+.dez-window-btn {
+    width: 26px; height: 26px;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+.dez-window-btn:hover { background: rgba(0, 0, 0, 0.07); }
+.dez-window-btn img { width: 14px; height: 14px; }
+.dez-window-body {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+}
+.dez-window-body > iframe { width: 100%; height: 100%; border: none; display: block; background: #fff; }
+.dez-window-body.padded { padding: 1em 1.2em; }
+
+/* --------------------------------------------- misc Fomantic leftovers */
+.ui.header { font-family: var(--dez-font); font-weight: 700; margin: 0 0 0.6em; display: flex; align-items: center; gap: 0.45em; }
+h3.ui.header { font-size: 1.15em; }
+.ui.header .content { display: inline-block; }
+.ui.header .sub.header { display: block; font-size: 0.78em; font-weight: 400; color: var(--dez-text-sub); }
+.ui.divider { border: none; border-top: 1px solid var(--dez-border); margin: 1em 0; }
+
+.ui.message {
+    background: var(--dez-surface-2);
+    border: 1px solid var(--dez-border);
+    border-radius: var(--dez-radius-sm);
+    padding: 0.85em 1em;
+    margin: 0.6em 0;
+    font-size: 0.93em;
+}
+.ui.warning.message  { background: #fff8ec; border-color: #f0d9ab; color: #7a5b17; }
+.ui.error.message, .ui.negative.message { background: #fdf1f1; border-color: #edc4c4; color: #8a2727; }
+.ui.positive.message { background: #f0f9f2; border-color: #bfe3c8; color: #1e6b34; }
+.ui.info.message     { background: #eff5fe; border-color: #c3d7f5; color: #23509e; }
+
+.ui.label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    background: var(--dez-surface-2);
+    border: 1px solid var(--dez-border);
+    border-radius: 6px;
+    padding: 0.25em 0.6em;
+    font-size: 0.82em;
+    color: var(--dez-text-sub);
+}
+.ui.circular.label { border-radius: 999px; }
+
+.ui.segment {
+    background: var(--dez-surface);
+    border: 1px solid var(--dez-border);
+    border-radius: var(--dez-radius-sm);
+    padding: 0.9em 1em;
+    margin: 0.6em 0;
+}
+
+.ui.table, .ui.celled.table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--dez-surface);
+    border: 1px solid var(--dez-border);
+    border-radius: var(--dez-radius-sm);
+    overflow: hidden;
+    font-size: 0.93em;
+}
+.ui.table th {
+    background: var(--dez-surface-2);
+    text-align: left;
+    font-weight: 600;
+    padding: 0.55em 0.8em;
+    border-bottom: 1px solid var(--dez-border);
+}
+.ui.table td { padding: 0.5em 0.8em; border-bottom: 1px solid var(--dez-border); }
+.ui.table tr:last-child td { border-bottom: none; }
+.ui.very.compact.table th, .ui.very.compact.table td { padding: 0.35em 0.5em; }
+
+.ui.breadcrumb { font-size: 0.95em; }
+.ui.breadcrumb .section { color: var(--dez-text); }
+.ui.breadcrumb .divider { display: inline; border: none; margin: 0 0.2em; color: var(--dez-text-sub); }
+
+.ui.list .item { padding: 0.4em 0; }
+.ui.relaxed.divided.list > .item { border-bottom: 1px solid var(--dez-border); padding: 0.7em 0; display: flex; gap: 0.7em; align-items: flex-start; }
+.ui.relaxed.divided.list > .item:last-child { border-bottom: none; }
+.ui.list .item .header { font-weight: 600; }
+.ui.list .item .description { color: var(--dez-text-sub); font-size: 0.9em; word-break: break-all; }
+
+.ui.form .field { margin-bottom: 1em; }
+.ui.form .field > label { display: block; font-weight: 600; margin-bottom: 0.35em; }
+
+/* loader spinner */
+.ui.loader, .ui.active.loader, .ui.inline.loader {
+    display: inline-block;
+    width: 26px; height: 26px;
+    border: 3px solid rgba(0,0,0,0.12);
+    border-top-color: rgba(0,0,0,0.55);
+    border-radius: 50%;
+    animation: dez-spin 0.7s linear infinite;
+}
+.ui.centered.loader { display: block; margin: 0 auto; }
+.ui.text.loader {
+    width: auto; height: auto;
+    border: none;
+    animation: none;
+    text-align: center;
+    color: var(--dez-text-sub);
+}
+.ui.text.loader::before {
+    content: "";
+    display: block;
+    width: 26px; height: 26px;
+    margin: 0 auto 0.5em;
+    border: 3px solid rgba(0,0,0,0.12);
+    border-top-color: rgba(0,0,0,0.55);
+    border-radius: 50%;
+    animation: dez-spin 0.7s linear infinite;
+}
+.ui.dimmer.inverted { background: rgba(255,255,255,0.75); position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+
+@keyframes dez-spin { to { transform: rotate(360deg); } }
+
+/* simple grid helpers used by legacy pages */
+.ui.container { margin: 0 auto; }
+.ui.middle.aligned.center.aligned.grid {
+    display: flex; align-items: center; justify-content: center; text-align: center;
+}
+
+/* -------------------------------------------- window resize / confirm */
+.dez-window-grip { position: absolute; z-index: 5; }
+.dez-window-grip-e  { top: 0; right: -3px; width: 8px; height: 100%; cursor: ew-resize; }
+.dez-window-grip-s  { left: 0; bottom: -3px; width: 100%; height: 8px; cursor: ns-resize; }
+.dez-window-grip-se { right: -3px; bottom: -3px; width: 16px; height: 16px; cursor: nwse-resize; }
+
+/* During window drag / resize, iframes must not swallow mouse events */
+body.dez-interacting .dez-window-body iframe { pointer-events: none; }
+body.dez-interacting { user-select: none; }
+
+/* Transparent capture layer shown only while dragging / resizing a floating
+   window. Sits above the page (and the KVM viewport iframe) but below every
+   floating window, so a cursor that outruns the window still delivers its
+   mousemove / mouseup to this document. */
+.dez-drag-shield {
+    position: fixed;
+    inset: 0;
+    z-index: 2400;
+    background: transparent;
+    cursor: move;
+}
+
+.dez-window-confirm {
+    position: absolute;
+    top: 44px;
+    right: 10px;
+    z-index: 10;
+    background: var(--dez-surface);
+    border: 1px solid var(--dez-border-strong);
+    border-radius: var(--dez-radius-sm);
+    box-shadow: var(--dez-shadow);
+    padding: 0.8em 1em;
+    font-size: 0.88em;
+    max-width: 260px;
+}
+.dez-window-confirm-row {
+    display: flex;
+    gap: 0.5em;
+    justify-content: flex-end;
+    margin-top: 0.7em;
+}
+
+/* ------------------------------------------------------- dark theme */
+
+body.dez-dark .dez-window { background: rgba(35, 35, 38, 0.97); }
+body.dez-dark .dez-window-header { background: rgba(255, 255, 255, 0.04); }
+body.dez-dark .dez-window-btn:hover { background: rgba(255, 255, 255, 0.1); }
+body.dez-dark .ui.button:hover { border-color: #5a5a60; }
+body.dez-dark .ui.button:active { background: #333338; }
+body.dez-dark .ui.basic.button:hover { background: rgba(255, 255, 255, 0.06) !important; }
+
+/* Baked-in dark-grey stroke icons are inverted for dark surfaces */
+body.dez-dark img.dez-icon,
+body.dez-dark .tb-btn img,
+body.dez-dark .dez-window-btn img,
+body.dez-dark .dez-toolbox-item img,
+body.dez-dark .sp-quick img,
+body.dez-dark .device-entry img.dez-icon,
+body.dez-dark #deviceSelector img.dez-icon {
+    filter: invert(0.88) hue-rotate(180deg);
+}
+
+/* Legacy tool pages with hard-coded light chrome */
+body.dez-dark #iso-toolbar,
+body.dez-dark #fm-toolbar,
+body.dez-dark #fm-statusbar { background: var(--dez-surface); border-color: var(--dez-border); }
+body.dez-dark .iso-table thead th,
+body.dez-dark .fm-table thead th { background: var(--dez-surface-2); border-color: var(--dez-border); color: var(--dez-text); }
+body.dez-dark .iso-table td,
+body.dez-dark .fm-table td { border-color: var(--dez-border); }
+body.dez-dark .iso-table tbody tr:hover,
+body.dez-dark .fm-table tbody tr:hover { background: rgba(255, 255, 255, 0.05); }

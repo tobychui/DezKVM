@@ -1,0 +1,54 @@
+<!--
+    tools/system-info.html
+    System Info tool panel — device details for the active KVM instance.
+    Ajax-loaded into a DezWindow inside viewport.html; uses viewport globals
+    (kvmDeviceUUID, $).
+-->
+<div class="dez-tool-panel" id="tool-system-info">
+    <div class="tool-status-card" id="si-rows">
+        <div class="tool-kv"><span class="k">Loading…</span><span class="v"></span></div>
+    </div>
+    <div class="tool-row" style="justify-content:flex-end;">
+        <button class="ui basic button" onclick="siRefresh()"><i class="sync icon"></i> Refresh</button>
+    </div>
+</div>
+<script>
+(function () {
+    function esc(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    window.siRefresh = function () {
+        $.get('/api/v1/instances', function (instances) {
+            const inst = Array.isArray(instances)
+                ? instances.find(function (i) { return i.uuid === kvmDeviceUUID; })
+                : null;
+            const box = document.getElementById('si-rows');
+            if (!inst) {
+                box.innerHTML = '<div class="tool-kv"><span class="k">Error</span><span class="v">Instance not found</span></div>';
+                return;
+            }
+            const rows = [
+                ['Hardware UUID', inst.uuid],
+                ['Video capture', inst.video_capture_dev],
+                ['Resolution', inst.video_resolution_width + '×' + inst.video_resolution_height + ' @ ' + inst.video_framerate + ' fps'],
+                ['Audio capture', inst.audio_capture_dev],
+                ['Audio config', inst.audio_channels + ' ch @ ' + inst.audio_sample_rate + ' Hz'],
+                ['USB KVM device', inst.usb_kvm_device],
+                ['Aux MCU device', inst.aux_mcu_device],
+                ['Storage device', inst.storage_device || 'not detected'],
+                ['Storage partition ID', inst.storage_uuid || '—'],
+                ['Storage side', inst.usb_mass_storage_side === 2 ? 'Remote' : 'KVM'],
+                ['Storage browsable', inst.storage_browsable ? 'Yes' : 'No'],
+                ['Stream info', inst.stream_info]
+            ];
+            box.innerHTML = rows.map(function (r) {
+                return '<div class="tool-kv"><span class="k">' + esc(r[0]) + '</span><span class="v">' + esc(r[1]) + '</span></div>';
+            }).join('');
+        });
+    };
+
+    siRefresh();
+})();
+</script>

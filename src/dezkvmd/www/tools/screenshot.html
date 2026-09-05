@@ -1,0 +1,45 @@
+<!--
+    tools/screenshot.html
+    Screenshot tool panel — ajax-loaded into a DezWindow inside viewport.html.
+    Uses the viewport globals: kvmDeviceUUID, $, $.toast.
+-->
+<div class="dez-tool-panel" id="tool-screenshot">
+    <p class="tool-desc">Capture the current frame of the remote display.</p>
+    <div style="border:1px solid var(--dez-border);border-radius:8px;overflow:hidden;background:#111;margin-bottom:0.8em;">
+        <img id="ts-preview" src="" alt="Screenshot preview" style="width:100%;display:block;min-height:120px;object-fit:contain;">
+    </div>
+    <div class="tool-row" style="justify-content:flex-end;">
+        <button class="ui basic button" onclick="tsRefresh()"><i class="sync icon"></i> Recapture</button>
+        <button class="ui primary button" onclick="tsDownload()"><i class="download icon"></i> Download PNG</button>
+    </div>
+</div>
+<script>
+(function () {
+    window.tsRefresh = function () {
+        document.getElementById('ts-preview').src =
+            '/api/v1/screenshot/' + kvmDeviceUUID + '?ts=' + Date.now();
+    };
+
+    window.tsDownload = function () {
+        fetch('/api/v1/screenshot/' + kvmDeviceUUID + '?ts=' + Date.now())
+            .then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.blob();
+            })
+            .then(function (blob) {
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'dezkvm-screenshot-' + new Date().toISOString().replace(/[:.]/g, '-') + '.png';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+            })
+            .catch(function (err) {
+                $.toast({ class: 'error', message: 'Screenshot failed: ' + err.message, duration: 4000 });
+            });
+    };
+
+    tsRefresh();
+})();
+</script>

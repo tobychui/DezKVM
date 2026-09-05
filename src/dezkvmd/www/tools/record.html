@@ -1,0 +1,256 @@
+<!--
+    tools/record.html
+    Video Recording tool — records the remote display (full screen or a
+    selected area) in the browser via canvas capture + MediaRecorder.
+    Browsers can only record WebM, so recordings download as .webm files.
+    Ajax-loaded into a DezWindow inside viewport.html.
+-->
+<div class="dez-tool-panel" id="tool-record">
+    <div style="display:flex;align-items:center;gap:1.2em;margin-bottom:1em;">
+        <div style="flex:1;">
+            <div id="rec-timer" style="font-size:2em;font-weight:700;font-variant-numeric:tabular-nums;">00:00:00</div>
+            <div id="rec-status" style="color:var(--dez-text-sub);font-size:0.85em;">Ready to record</div>
+        </div>
+        <button id="rec-btn-start" onclick="recStart()" title="Start recording"
+                style="width:52px;height:52px;border-radius:50%;border:1px solid var(--dez-border-strong);background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;">
+            <span style="width:22px;height:22px;border-radius:50%;background:var(--dez-red);display:block;"></span>
+        </button>
+        <button id="rec-btn-pause" onclick="recPauseResume()" title="Pause / resume" disabled
+                style="width:44px;height:44px;border-radius:50%;border:1px solid var(--dez-border-strong);background:#fff;cursor:pointer;">
+            <i class="pause icon" style="margin:0;"></i>
+        </button>
+        <button id="rec-btn-stop" onclick="recStop()" title="Stop and save" disabled
+                style="width:44px;height:44px;border-radius:50%;border:1px solid var(--dez-border-strong);background:#fff;cursor:pointer;">
+            <i class="stop icon" style="margin:0;"></i>
+        </button>
+    </div>
+
+    <div class="tool-row">
+        <label style="font-size:0.9em;color:var(--dez-text-sub);">Capture</label>
+        <select id="rec-mode" style="flex:1;">
+            <option value="full" selected>Full Screen Record</option>
+            <option value="area">Select Area &amp; Record</option>
+        </select>
+    </div>
+    <p class="tool-desc" style="margin:0.4em 0 0;">
+        Recordings are saved as <code>.webm</code> files to your browser's
+        download folder when you press stop.
+    </p>
+</div>
+<script>
+(function () {
+    let recorder = null;
+    let chunks = [];
+    let drawTimer = null;
+    let timerHandle = null;
+    let startTs = 0;
+    let pausedAt = 0;      // accumulated paused milliseconds
+    let pauseBegin = 0;
+    let recording = false;
+
+    function fmtTimer(ms) {
+        const s = Math.max(0, Math.floor(ms / 1000));
+        return String(Math.floor(s / 3600)).padStart(2, '0') + ':'
+             + String(Math.floor((s % 3600) / 60)).padStart(2, '0') + ':'
+             + String(s % 60).padStart(2, '0');
+    }
+
+    function setStatus(text) {
+        const el = document.getElementById('rec-status');
+        if (el) el.textContent = text;
+    }
+
+    function setButtons(state) { // 'idle' | 'recording' | 'paused'
+        const start = document.getElementById('rec-btn-start');
+        const pause = document.getElementById('rec-btn-pause');
+        const stop = document.getElementById('rec-btn-stop');
+        const mode = document.getElementById('rec-mode');
+        if (!start) return;
+        start.disabled = state !== 'idle';
+        start.style.opacity = state === 'idle' ? '1' : '0.4';
+        pause.disabled = state === 'idle';
+        stop.disabled = state === 'idle';
+        mode.disabled = state !== 'idle';
+        pause.querySelector('i').className = (state === 'paused' ? 'play icon' : 'pause icon');
+    }
+
+    function updateTimer() {
+        const el = document.getElementById('rec-timer');
+        if (el && recording) {
+            el.textContent = fmtTimer(Date.now() - startTs - pausedAt);
+        }
+    }
+
+    /* ---- area selection overlay (same interaction as the OCR tool) ---- */
+    function selectRecordArea() {
+        return new Promise(function (resolve) {
+            const capture = document.getElementById('remoteCapture');
+            if (!capture) { resolve(null); return; }
+
+            pauseAllKeyEvents = true;
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9998;cursor:crosshair;';
+            const box = document.createElement('div');
+            box.style.cssText = 'position:absolute;border:2px solid #e03d3d;background:rgba(224,61,61,0.12);display:none;pointer-events:none;z-index:9999;';
+            const hint = document.createElement('div');
+            hint.style.cssText = 'position:fixed;top:18px;left:50%;transform:translateX(-50%);background:rgba(250,250,252,0.95);border:1px solid #e3e5e8;border-radius:10px;padding:8px 16px;font-size:0.9em;z-index:9999;';
+            hint.textContent = 'Drag to select the recording area — Esc to cancel';
+            document.body.appendChild(overlay);
+            document.body.appendChild(box);
+            document.body.appendChild(hint);
+
+            let sx = 0, sy = 0, dragging = false;
+
+            function cleanup() {
+                overlay.remove(); box.remove(); hint.remove();
+                document.removeEventListener('keydown', onKey);
+                pauseAllKeyEvents = false;
+            }
+            function onKey(e) {
+                if (e.key === 'Escape') { cleanup(); resolve(null); }
+            }
+            document.addEventListener('keydown', onKey);
+
+            overlay.addEventListener('mousedown', function (e) {
+                const r = capture.getBoundingClientRect();
+                if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
+                dragging = true; sx = e.clientX; sy = e.clientY;
+                box.style.left = sx + 'px'; box.style.top = sy + 'px';
+                box.style.width = '0'; box.style.height = '0'; box.style.display = 'block';
+            });
+            overlay.addEventListener('mousemove', function (e) {
+                if (!dragging) return;
+                const r = capture.getBoundingClientRect();
+                const cx = Math.max(r.left, Math.min(e.clientX, r.right));
+                const cy = Math.max(r.top, Math.min(e.clientY, r.bottom));
+                box.style.left = Math.min(sx, cx) + 'px';
+                box.style.top = Math.min(sy, cy) + 'px';
+                box.style.width = Math.abs(cx - sx) + 'px';
+                box.style.height = Math.abs(cy - sy) + 'px';
+            });
+            overlay.addEventListener('mouseup', function () {
+                if (!dragging) return;
+                dragging = false;
+                const r = capture.getBoundingClientRect();
+                const b = box.getBoundingClientRect();
+                cleanup();
+                if (b.width < 10 || b.height < 10) { resolve(null); return; }
+                // Convert the display-space rect to intrinsic stream pixels
+                const iw = capture.naturalWidth || capture.videoWidth || r.width;
+                const ih = capture.naturalHeight || capture.videoHeight || r.height;
+                const scaleX = iw / r.width, scaleY = ih / r.height;
+                resolve({
+                    x: Math.max(0, Math.round((b.left - r.left) * scaleX)),
+                    y: Math.max(0, Math.round((b.top - r.top) * scaleY)),
+                    w: Math.round(b.width * scaleX),
+                    h: Math.round(b.height * scaleY)
+                });
+            });
+        });
+    }
+
+    /* ---- recording pipeline ---- */
+    window.recStart = async function () {
+        if (recording) return;
+        const capture = document.getElementById('remoteCapture');
+        if (!capture) {
+            $.toast({ class: 'error', message: 'Remote display not available', duration: 3000 });
+            return;
+        }
+        if (typeof MediaRecorder === 'undefined') {
+            $.toast({ class: 'error', message: 'This browser does not support MediaRecorder', duration: 4000 });
+            return;
+        }
+
+        let area = null;
+        if (document.getElementById('rec-mode').value === 'area') {
+            setStatus('Select the area to record…');
+            area = await selectRecordArea();
+            if (!area) { setStatus('Ready to record'); return; }
+        }
+
+        const iw = capture.naturalWidth || capture.videoWidth || 1920;
+        const ih = capture.naturalHeight || capture.videoHeight || 1080;
+        const src = area || { x: 0, y: 0, w: iw, h: ih };
+
+        // Draw the (cropped) stream onto a canvas and record the canvas.
+        // Works for both the MJPEG <img> and the WebRTC <video> element.
+        const canvas = document.createElement('canvas');
+        canvas.width = src.w - (src.w % 2);   // even dimensions for the encoder
+        canvas.height = src.h - (src.h % 2);
+        const ctx = canvas.getContext('2d');
+        const fps = 25;
+        drawTimer = setInterval(function () {
+            try {
+                ctx.drawImage(capture, src.x, src.y, src.w, src.h, 0, 0, canvas.width, canvas.height);
+            } catch (e) { /* transient decode gaps are fine */ }
+        }, 1000 / fps);
+
+        let mime = 'video/webm;codecs=vp9';
+        if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm;codecs=vp8';
+        if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm';
+
+        chunks = [];
+        recorder = new MediaRecorder(canvas.captureStream(fps), {
+            mimeType: mime,
+            videoBitsPerSecond: 8 * 1000 * 1000
+        });
+        recorder.ondataavailable = function (e) { if (e.data && e.data.size > 0) chunks.push(e.data); };
+        recorder.onstop = function () {
+            const blob = new Blob(chunks, { type: 'video/webm' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'dezkvm-recording-' + new Date().toISOString().replace(/[:.]/g, '-') + '.webm';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(function () { URL.revokeObjectURL(a.href); }, 10000);
+            $.toast({ message: '<i class="green check icon"></i> Recording saved (' + (blob.size / 1048576).toFixed(1) + ' MB)', duration: 4000 });
+        };
+        recorder.start(1000);
+
+        recording = true;
+        startTs = Date.now();
+        pausedAt = 0;
+        timerHandle = setInterval(updateTimer, 500);
+        setStatus(area ? 'Recording selected area (' + canvas.width + '×' + canvas.height + ')' : 'Recording full screen');
+        setButtons('recording');
+    };
+
+    window.recPauseResume = function () {
+        if (!recorder || !recording) return;
+        if (recorder.state === 'recording') {
+            recorder.pause();
+            pauseBegin = Date.now();
+            setStatus('Paused');
+            setButtons('paused');
+        } else if (recorder.state === 'paused') {
+            recorder.resume();
+            pausedAt += Date.now() - pauseBegin;
+            setStatus('Recording');
+            setButtons('recording');
+        }
+    };
+
+    window.recStop = function () {
+        if (!recording) return;
+        recording = false;
+        clearInterval(drawTimer); drawTimer = null;
+        clearInterval(timerHandle); timerHandle = null;
+        if (recorder && recorder.state !== 'inactive') recorder.stop();
+        recorder = null;
+        setStatus('Ready to record');
+        document.getElementById('rec-timer').textContent = '00:00:00';
+        setButtons('idle');
+    };
+
+    // Called by toolbox.js when the Record window is closed mid-recording.
+    window.recOnWindowClosed = function () {
+        if (recording) {
+            recStop(); // stops and saves what was captured so far
+        }
+    };
+
+    setButtons('idle');
+})();
+</script>
