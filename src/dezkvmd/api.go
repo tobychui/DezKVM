@@ -18,19 +18,61 @@ func register_auth_apis(mux *http.ServeMux) {
 
 // register_ipkvm_apis registers IP-KVM-related API endpoints
 func register_ipkvm_apis(mux *http.ServeMux) {
+	// USB HID APIs
+	authManager.HandleFunc("/api/v1/hid/{uuid}/events", handleHIDEvents, mux)
+	authManager.HandleFunc("/api/v1/mouse_jiggler/{uuid}", handleMouseJiggler, mux)
+
+	// Streaming APIs
 	authManager.HandleFunc("/api/v1/stream/{uuid}/video", handleVideoStream, mux)
 	authManager.HandleFunc("/api/v1/stream/{uuid}/audio", handleAudioStream, mux)
-	authManager.HandleFunc("/api/v1/hid/{uuid}/events", handleHIDEvents, mux)
-	authManager.HandleFunc("/api/v1/instances", handleListInstances, mux)
-	authManager.HandleFunc("/api/v1/resolutions/{uuid}", handleGetSupportedResolutions, mux)
 	authManager.HandleFunc("/api/v1/resolution/{uuid}", handleGetCurrentResolution, mux)
-	authManager.HandleFunc("/api/v1/screenshot/{uuid}", handleScreenshot, mux)
-	authManager.HandleFunc("/api/v1/mouse_jiggler/{uuid}", handleMouseJiggler, mux)
-	authManager.HandleFunc("/api/v1/preferences/{uuid}", handlePreferences, mux)
-	// Runtime APIs
-	authManager.HandleFunc("/api/v1/mass_storage/switch", handleMassStorageSwitch, mux)
 	authManager.HandleFunc("/api/v1/resolution/change", handleChangeResolution, mux)
 	authManager.HandleFunc("/api/v1/reconnect/{uuid}", handleReconnectCapture, mux)
+
+	// WebRTC streaming APIs
+	authManager.HandleFunc("/api/v1/webrtc/{uuid}/offer", handleWebRTCOffer, mux)
+	authManager.HandleFunc("/api/v1/webrtc/{uuid}/stop", handleWebRTCStop, mux)
+	authManager.HandleFunc("/api/v1/webrtc/encoders", handleWebRTCEncoders, mux)
+
+	// Mass storage APIs
+	authManager.HandleFunc("/api/v1/mass_storage/switch", handleMassStorageSwitch, mux)
+
+	// ATX power control APIs
+	authManager.HandleFunc("/api/v1/atx/{uuid}/state", handleATXState, mux)
+	authManager.HandleFunc("/api/v1/atx/{uuid}/trigger", handleATXTrigger, mux)
+
+	// Storage volume & file-manager APIs
+	authManager.HandleFunc("/api/v1/storage/{uuid}/volume", handleStorageVolumeInfo, mux)
+	authManager.HandleFunc("/api/v1/storage/{uuid}/files", handleStorageFiles, mux)
+	authManager.HandleFunc("/api/v1/storage/{uuid}/upload", handleStorageUpload, mux)
+	authManager.HandleFunc("/api/v1/storage/{uuid}/rename", handleStorageRename, mux)
+	authManager.HandleFunc("/api/v1/storage/{uuid}/move", handleStorageMove, mux)
+	authManager.HandleFunc("/api/v1/storage/{uuid}/copy", handleStorageCopy, mux)
+	authManager.HandleFunc("/api/v1/storage/{uuid}/download", handleStorageDownload, mux)
+	authManager.HandleFunc("/api/v1/storage/{uuid}/thumb", handleStorageThumbnail, mux)
+	authManager.HandleFunc("/api/v1/storage/{uuid}/unmount", handleStorageUnmount, mux)
+	authManager.HandleFunc("/api/v1/storage/{uuid}/format/preview", handleStorageFormatPreview, mux)
+	authManager.HandleFunc("/api/v1/storage/{uuid}/format", handleStorageDiskFormat, mux)
+
+	// Image write APIs (write an ISO/IMG onto the mass storage device)
+	authManager.HandleFunc("/api/v1/storage/{uuid}/isowrite", handleISOWrite, mux)
+	authManager.HandleFunc("/api/v1/storage/{uuid}/isowrite/upload", handleISOWriteUpload, mux)
+	authManager.HandleFunc("/api/v1/storage/{uuid}/isowrite/status", handleISOWriteStatus, mux)
+
+	// ISO / disk-image library APIs
+	authManager.HandleFunc("/api/v1/iso/list", handleISOList, mux)
+	authManager.HandleFunc("/api/v1/iso/upload", handleISOUpload, mux)
+	authManager.HandleFunc("/api/v1/iso/delete", handleISODelete, mux)
+	authManager.HandleFunc("/api/v1/iso/rename", handleISORename, mux)
+	authManager.HandleFunc("/api/v1/iso/download", handleISODownload, mux)
+
+	// Settings APIs
+	authManager.HandleFunc("/api/v1/resolutions/{uuid}", handleGetSupportedResolutions, mux)
+	authManager.HandleFunc("/api/v1/preferences/{uuid}", handlePreferences, mux)
+
+	// Others
+	authManager.HandleFunc("/api/v1/instances", handleListInstances, mux)
+	authManager.HandleFunc("/api/v1/screenshot/{uuid}", handleScreenshot, mux)
 }
 
 // register_terminal_apis registers terminal-related API endpoints

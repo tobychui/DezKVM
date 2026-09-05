@@ -20,6 +20,8 @@ const (
 	USB_KVM_CFG_PATH = CONFIG_PATH + "/usbkvm.json"
 	UUID_FILE        = CONFIG_PATH + "/uuid.cfg"
 	DB_FILE_PATH     = CONFIG_PATH + "/sys.db"
+	ISO_STORE_PATH   = "./isostore"
+	THUMB_CACHE_PATH = "./thumb"
 )
 
 var (
@@ -128,6 +130,12 @@ func main() {
 
 		//Start IP-KVM mode
 		err = init_ipkvm_mode()
+		if err != nil {
+			log.Fatal(err)
+		}
+	case "debug":
+		// Run a debug tool selected with the -tool flag
+		err := handle_debug_tool()
 		if err != nil {
 			log.Fatal(err)
 		}

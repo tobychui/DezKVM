@@ -54,6 +54,20 @@ func run_dependency_precheck() error {
 		return fmt.Errorf("arecord not found in PATH")
 	}
 	log.Println("v4l2-ctl and arecord found in PATH.")
+
+	// Dependencies of the mass-storage format tool. These are only needed when
+	// the format feature is used, so a missing tool is a warning, not an error.
+	storageTools := []string{"lsblk", "parted", "partprobe", "mkfs.vfat", "mkfs.exfat", "mkfs.ext4", "mkfs.ntfs"}
+	for _, tool := range storageTools {
+		if _, err := exec.LookPath(tool); err != nil {
+			log.Printf("Warning: %s not found in PATH; the USB format tool may not work for all filesystems\n", tool)
+		}
+	}
+
+	// ffmpeg powers the WebRTC H.264 streaming mode (all encoder backends).
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		log.Println("Warning: ffmpeg not found in PATH; WebRTC streaming mode will be unavailable (MJPEG still works)")
+	}
 	return nil
 }
 
@@ -67,8 +81,8 @@ func list_usb_kvm_devcies() error {
 		log.Printf("USB KVM Device Tree %d:\n", i)
 		log.Printf(" - USB KVM Device: %s\n", dev.USBKVMDevicePath)
 		log.Printf(" - Aux MCU Device: %s\n", dev.AuxMCUDevicePath)
-		for _, cap := range dev.CaptureDevicePaths {
-			log.Printf(" - Capture Device: %s\n", cap)
+		for _, cap := range dev.VideoDevicePaths {
+			log.Printf(" - Video Capture Device: %s\n", cap)
 		}
 		for _, snd := range dev.AlsaDevicePaths {
 			log.Printf(" - ALSA Device: %s\n", snd)

@@ -14,8 +14,10 @@ import (
 	"imuslab.com/dezkvm/dezkvmd/mod/auth"
 	"imuslab.com/dezkvm/dezkvmd/mod/db"
 	"imuslab.com/dezkvm/dezkvmd/mod/dezkvm"
+	"imuslab.com/dezkvm/dezkvmd/mod/isostore"
 	"imuslab.com/dezkvm/dezkvmd/mod/logger"
 	"imuslab.com/dezkvm/dezkvmd/mod/sshprox"
+	"imuslab.com/dezkvm/dezkvmd/mod/thumbnails"
 )
 
 var (
@@ -25,6 +27,8 @@ var (
 	systemLogger       *logger.Logger
 	systemDB           *db.DB
 	sshproxManager     *sshprox.Manager
+	isoManager         *isostore.Manager
+	thumbRenderer      *thumbnails.RenderHandler
 )
 
 func init_system_db() error {
@@ -73,13 +77,23 @@ func init_ipkvm_mode() error {
 	// Initialize SSH Proxy Manager
 	sshproxManager = sshprox.NewSSHProxyManager()
 
+	// Initialize the ISO / disk-image library
+	isoManager, err = isostore.NewManager(ISO_STORE_PATH)
+	if err != nil {
+		log.Fatal("Failed to initialize ISO store:", err)
+		return err
+	}
+
+	// Initialize the thumbnail renderer. Previews are cached under
+	// ./thumb/{storage_uuid}/{relative_path}.jpg
+	thumbRenderer = thumbnails.NewRenderHandler(THUMB_CACHE_PATH)
+
 	//Create a new DezkVM manager
 	dezkvmManager = dezkvm.NewKvmHostInstance(&dezkvm.RuntimeOptions{
 		EnableLog:        true,
 		ConfigFolderPath: "./config/instances",
 	})
 
-	// Experimental
 	connectedUsbKvms, err := dezkvm.ScanConnectedUsbKvmDevices()
 	if err != nil {
 		return err
@@ -96,7 +110,6 @@ func init_ipkvm_mode() error {
 	if err != nil {
 		return err
 	}
-	// ~Experimental
 
 	// Handle root routing with CSRF protection
 	handle_root_routing(listeningServerMux)
