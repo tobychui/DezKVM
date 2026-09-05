@@ -1,52 +1,107 @@
 /*
-    DezKVM main.js
+    DezKVM main.js — shell logic
 
-    This file contains the main JavaScript logic for the DezKVM web interface
-    For viewport logics (KVM video and audio streaming), see viewport.js
+    Top bar (device selector, session controls), landing instance grid,
+    right side panel, and the floating Terminal / ISO-library windows.
+    The active KVM session itself runs inside the #sessionContext iframe
+    (viewport.html); vpCall() bridges shell buttons to functions in it.
+
+    Shared UI kit: js/dez-ui.js + css/dez-ui.css (DezWindow, $.toast, ...).
 */
-let currentTab = 'instances';
-let currentList = null;
-let terminals = {}; // Store active terminal sessions
-let terminalCounter = 0; // Counter for unique terminal IDs
-let activeTerminalId = null; // Currently active terminal
 
-$(document).ready(function() {
+let activeSessionUuid = null;
+let sessionStartTime = null;
+let sessionTimerHandle = null;
+let knownInstances = [];
+let terminalCounter = 0;
+
+/*
+    Tool registry (shell side).
+
+    Viewport tools are opened inside the session iframe via dezOpenTool();
+    shell tools open floating windows at the shell level. The same ids are
+    used by the viewport toolbox (js/toolbox.js) and the visibility
+    preference (localStorage key dezkvm.tools.visible, managed from the
+    settings overlay "Tools" tab).
+*/
+const SHELL_TOOL_REGISTRY = [
+    { id: 'screenshot',    name: 'Screenshot',    sub: 'Capture and download frame', icon: 'img/icons/screenshot.svg',    scope: 'viewport' },
+    { id: 'ocr-copy',      name: 'OCR Copy',      sub: 'Copy text from the screen',  icon: 'img/icons/ocr.svg',           scope: 'viewport' },
+    { id: 'record',        name: 'Record',        sub: 'Record the remote display',  icon: 'img/icons/record.svg',        scope: 'viewport' },
+    { id: 'clipboard',     name: 'Clipboard',     sub: 'Paste text to remote',       icon: 'img/icons/clipboard.svg',     scope: 'viewport' },
+    { id: 'file-transfer', name: 'File Transfer', sub: 'Browse the USB drive',       icon: 'img/icons/file-transfer.svg', scope: 'viewport' },
+    { id: 'virtual-usb',   name: 'Virtual USB',   sub: 'Switch mass storage side',   icon: 'img/icons/usb.svg',           scope: 'viewport' },
+    { id: 'power',         name: 'Power Control', sub: 'Control remote power',       icon: 'img/icons/power.svg',         scope: 'viewport' },
+    { id: 'system-info',   name: 'System Info',   sub: 'View device details',        icon: 'img/icons/info.svg',          scope: 'viewport' },
+    { id: 'terminal',      name: 'Terminal',      sub: 'Open an SSH session',        icon: 'img/icons/terminal.svg',      scope: 'shell' },
+    { id: 'iso-library',   name: 'ISO Library',   sub: 'Manage bootable images',     icon: 'img/icons/disc.svg',          scope: 'shell' }
+];
+
+
+function visibleToolIds() {
+    try {
+        const stored = JSON.parse(localStorage.getItem('dezkvm.tools.visible'));
+        if (Array.isArray(stored)) return stored;
+    } catch (e) { /* fall through */ }
+    return SHELL_TOOL_REGISTRY.map(t => t.id);
+}
+
+/* ------------------------------------------------------------ helpers */
+
+function csrfToken() {
+    const meta = document.querySelector('meta[name="dezkvm.csrf.token"]');
+    return meta ? meta.getAttribute('content') : '';
+}
+
+// Call a function inside the session viewport iframe, when available
+function vpCall(fnName, ...args) {
+    const frame = document.getElementById('sessionContext');
+    if (!activeSessionUuid || !frame.contentWindow) {
+        $.toast({ message: '<img src="img/icons/display.svg" class="dez-icon"> Connect to a device first', duration: 3000 });
+        return;
+    }
+    const fn = frame.contentWindow[fnName];
+    if (typeof fn === 'function') {
+        try { return fn(...args); } catch (e) { console.error('vpCall ' + fnName + ' failed:', e); }
+    } else {
+        console.warn('viewport function not available:', fnName);
+    }
+}
+
+function shortUuid(uuid) {
+    return uuid ? uuid.substring(0, 8) : '';
+}
+
+function instanceDisplayName(inst) {
+    return 'KVM Port ' + shortUuid(inst.uuid);
+}
+
+/* ------------------------------------------------------- initial load */
+
+$(document).ready(function () {
     listInstances();
+    buildSidePanelLists();
+    updateThemeIcon();
+    updateFitIcon();
+
+    // Refresh the landing grid periodically while it is visible
+    setInterval(function () {
+        if (!activeSessionUuid) listInstances();
+    }, 30000);
+
+    // Session resume via URL hash
     if (window.location.hash) {
         try {
             const hashData = JSON.parse(decodeURIComponent(window.location.hash.substring(1)));
             if (hashData.type === 'instance' && hashData.sessionId) {
                 $.toast({
-                    message: `Resume previous session?`,
-                    closeIcon: false,
-                    actions:[{
-                            text: 'Yes',
-                            class: 'mini basic green',
-                            click: function() {
-                                const sessionId = hashData.sessionId;
-                                startSession(sessionId);
-                            }
-                        },{
-                            text: 'No',
-                            class: 'mini basic',
-                            click: function() {
-                                window.location.hash = '';
-                            }
-                        }],
-                    onVisible: function() {
-                        
-                        $('#resumeSessionBtn').on('click', function() {
-                            
-                            $(this).closest('.toast-box').find('.close').click();
-                        });
-                        $('#dismissResumeBtn').on('click', function() {
-                            
-                            $(this).closest('.toast-box').find('.close').click();
-                        });
-                    }
+                    message: 'Resume previous session?',
+                    duration: 5000,
+                    actions: [
+                        { text: 'Yes', class: 'mini green', click: function () { startSession(hashData.sessionId); } },
+                        { text: 'No', class: 'mini basic', click: function () { window.location.hash = ''; } }
+                    ]
                 });
-            } else if (hashData.type === 'terminal' && hashData.terminalId) {
-                switchTerminal(hashData.terminalId);
             }
         } catch (e) {
             console.error('Failed to parse URL hash:', e);
@@ -54,452 +109,457 @@ $(document).ready(function() {
     }
 });
 
-function hideAllViewports() {
-    $(".viewport").hide();   
-}
+/* -------------------------------------------------- instances / landing */
 
-function hideAllLists(){
-    $(".viewlist").hide();
-}
-
-/*
-    View List Management
-*/
-
-function hideTerminalList() {
-    $('#terminalsTab').hide();
-    $('.sidebar .menu-options .item[menu="terminal"]').removeClass('active');
-    if (currentTab === 'terminal' && activeTerminalId) {
-        $(`#${activeTerminalId}`).focus();
-    }
-}
-
-function toggleTerminalList() {
-    if ($('#terminalsTab').is(':visible')) {
-        hideTerminalList();
-    } else {
-        hideInstanceList();
-        listTerminals();
-        $('#terminalsTab').show();
-    }
-}
-
-function showInstanceList(){
-    listInstances();
-    $('#instancesTab').show();
-}
-
-function hideInstanceList() {
-    $('#instancesTab').hide();
-    $('.sidebar .menu-options .item[menu="instances"]').removeClass('active');
-    if (currentTab === 'session') {
-        $('#sessionContext').focus();
-    }
-}
-
-function toggleInstanceList(){
-    if ($('#instancesTab').is(':visible')) {
-        hideInstanceList();
-    } else {
-        showInstanceList();
-    }
-}
-
-function toggleLists(listType) {
-    if (listType != currentList) {
-        hideAllLists();
-    }
-    if (listType === 'instances') {
-        toggleInstanceList();
-    } else if (listType === 'terminal') {
-        toggleTerminalList();
-    } else{
-        return;
-    }
-
-    currentList = listType;
-
-    $('.sidebar .menu-options .item').removeClass('active');
-    $(`.sidebar .menu-options .item[menu="${listType}"]`).addClass('active');
-}
-
-/*
-    Viewport Management
-*/
-function switchViewport(viewport) {
-    hideAllViewports();
-    if (viewport === 'session') {
-        hideAllLists();
-        $('#session').show();
-        $('#sessionContext').focus();
-        currentTab = viewport;
-    } else if (viewport == "terminal"){
-        $('#terminal').show();
-        currentTab = viewport;
-    } else if (viewport === 'files') {
-        // Handle file management tab activation here
-    } else if (viewport === 'power') {
-        // Handle power control tab activation here
-    }
-    
-    $('.sidebar .menu-options .item').removeClass('active');
-    $(`.sidebar .menu-options .item[menu="${viewport}"]`).addClass('active');
-}
-
-/*
-    Session & Viewport Management
-*/
-
-// Make sure session iframe regains focus when the window is focused or when the iframe content is loaded
-$(window).on('focus', function() {
-    if (currentTab === 'session') {
-        $('#sessionContext').focus();
-    }
-});
-
-$('#sessionContext').on('load', function() {
-    this.contentWindow.focus();
-});
-
-function connectToSession(sessionId, callback=undefined) {
-    $('#sessionContext').attr('src', `/viewport.html?ts=${Date.now()}#${sessionId}`);
-    window.location.hash = encodeURIComponent(JSON.stringify({
-        type: 'instance',
-        sessionId: sessionId
-    }));
-    if (callback) callback();
-}
-
-function startSession(sessionId) {
-    connectToSession(sessionId, function() {
-        // Switch to session viewport
-        switchViewport('session');
-
-        // Hide instance list if it's open
-        hideInstanceList();
-
-        // Start audio streaming automatically with retries
-        let audioRetryCount = 0;
-        const maxAudioRetries = 5;
-        const audioRetryInterval = 200;
-
-        function tryStartAudio() {
-            if ($('#sessionContext')[0].contentWindow.startAudioWebSocket) {
-                let currentAudioQuality = localStorage.getItem('audioQuality');
-                if (!currentAudioQuality) {
-                    currentAudioQuality = 'standard'; // Default quality
-                    localStorage.setItem('audioQuality', currentAudioQuality);
-                }else if (currentAudioQuality == 'disabled') {
-                    return; // Audio is disabled, do not start
-                }
-                
-                $('#sessionContext')[0].contentWindow.startAudioWebSocket(currentAudioQuality);
-                console.log('Audio streaming started successfully');
-            } else if (audioRetryCount < maxAudioRetries) {
-                audioRetryCount++;
-                console.log(`Retrying audio start (attempt ${audioRetryCount}/${maxAudioRetries})`);
-                setTimeout(tryStartAudio, audioRetryInterval);
-            } else {
-                console.log('Failed to start audio streaming after maximum retries');
-                $.toast({
-                    class: 'error',
-                    message: 'Failed to connect to remote Audio Device.',
-                });
-            }
-        }
-
-        setTimeout(function(){
-            $('#sessionContext')[0].contentWindow.focus();
-            tryStartAudio();
-        }, 300);
-    });
-}
-
-/* 
-    Instances List
-*/
-
-function renderInstance(instance) {
-    let metadata = encodeURIComponent(JSON.stringify(instance));
-    return `
-        <div class="kvm-instance" data-metadata="${metadata}">
-            <div class="instance-body">
-                <div class="screenshot">
-                    <img src="/api/v1/screenshot/${instance.uuid}#${Date.now()}" alt="Screenshot for ${instance.uuid}">
-                </div>
+function renderInstanceCard(inst) {
+    const card = $(`
+        <div class="kvm-instance">
+            <div class="screenshot">
+                <img src="/api/v1/screenshot/${inst.uuid}#${Date.now()}" alt="Screenshot">
             </div>
-            <div class="instance-overlay">
-                <div class="ui small circular basic label">
-                    ${instance.uuid}
-                </div>
-                <h3 class="ui header">
-                    <span>${instance.video_capture_dev}</span>
-                    <div class="sub header">${instance.stream_info}</div>
-                </h3>
-                <div class="instance-actions">
-                    <button class="ui small circular secondary button launch-btn" onclick="startSession('${instance.uuid}')">Connect</button>
-                    <button class="ui small circular button details-btn" onclick="showInstanceDetails('${instance.uuid}')">Details</button>
-                </div>
-                
+            <div class="instance-info">
+                <span class="status-dot on"></span>
+                <span class="inst-text">
+                    <b>${instanceDisplayName(inst)}</b>
+                    <small>${inst.video_capture_dev || ''} · ${inst.video_resolution_width}×${inst.video_resolution_height}@${inst.video_framerate}</small>
+                </span>
+                <button class="ui small primary button">Connect</button>
             </div>
         </div>
-    `;
+    `);
+    card.find('button').on('click', function (e) {
+        e.stopPropagation();
+        startSession(inst.uuid);
+    });
+    card.on('click', function () { startSession(inst.uuid); });
+    return card;
 }
 
-function listInstances(callback=undefined) {
-    $.get('/api/v1/instances', function(data) {
+function listInstances(callback) {
+    $.get('/api/v1/instances', function (data) {
         let instances = [];
         try {
             instances = typeof data === 'string' ? JSON.parse(data) : data;
-        } catch (e) {
-            instances = [];
-        }
+        } catch (e) { instances = []; }
         instances.sort((a, b) => a.uuid.localeCompare(b.uuid));
+        knownInstances = instances;
+
         const $list = $('#instanceList');
         $list.empty();
         if (instances.length === 0) {
-            $list.append('<div class="ui message">No instances found.</div>');
-            return;
+            $list.append('<div class="ui message">No KVM ports detected. Check the USB connections and restart dezkvmd.</div>');
+        } else {
+            instances.forEach(function (inst) { $list.append(renderInstanceCard(inst)); });
         }
-        instances.forEach(function(instance) {
-            $list.append(renderInstance(instance));
-        });
+
+        renderDevicePanel();
         if (callback) callback();
     });
 }
 
-$(document).on('keydown', function(e) {
-    if (currentTab === 'session') {
-        $('#sessionContext')[0].contentWindow.focus();
-    } else if (currentTab === 'terminal' && activeTerminalId) {
-        $(`#${activeTerminalId}`)[0].contentWindow.focus();
+/* --------------------------------------------------- device dropdown */
+
+function renderDevicePanel() {
+    const $list = $('#devicePanelList');
+    $list.empty();
+    if (knownInstances.length === 0) {
+        $list.append('<div class="ui message" style="margin:4px;">No devices found.</div>');
+        return;
+    }
+    knownInstances.forEach(function (inst) {
+        const entry = $(`
+            <button class="device-entry ${inst.uuid === activeSessionUuid ? 'active' : ''}">
+                <span class="dev-thumb">
+                    <img src="/api/v1/screenshot/${inst.uuid}#${Date.now()}" alt="">
+                    <img src="img/icons/display.svg" class="dez-icon thumb-fallback" alt="">
+                </span>
+                <span class="dev-text">
+                    <b>${instanceDisplayName(inst)}</b>
+                    <small>${inst.video_capture_dev || ''}</small>
+                </span>
+                <span class="status-dot on"></span>
+            </button>
+        `);
+        // Fall back to the generic display icon when the preview is
+        // unavailable (instance just started, capture device busy, ...)
+        entry.find('.dev-thumb > img').first().on('error', function () {
+            $(this).closest('.dev-thumb').addClass('no-preview');
+        });
+        entry.on('click', function () {
+            hideDevicePanel();
+            if (inst.uuid !== activeSessionUuid) startSession(inst.uuid);
+        });
+        $list.append(entry);
+    });
+}
+
+function toggleDevicePanel() {
+    const panel = document.getElementById('devicePanel');
+    if (panel.style.display === 'none') {
+        listInstances(function () { panel.style.display = ''; });
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+function hideDevicePanel() {
+    document.getElementById('devicePanel').style.display = 'none';
+}
+
+// Close popovers when clicking elsewhere
+document.addEventListener('mousedown', function (e) {
+    if (!e.target.closest('.tb-device')) hideDevicePanel();
+    if (!e.target.closest('#sidePanel') && !e.target.closest('.tb-btn')) hideSidePanel();
+});
+
+/* ---------------------------------------------------- session control */
+
+function startSession(uuid) {
+    const frame = document.getElementById('sessionContext');
+    frame.src = `/viewport.html?ts=${Date.now()}#${uuid}`;
+    frame.style.display = '';
+    $('#landing').hide();
+
+    activeSessionUuid = uuid;
+    document.body.classList.add('session-active');
+    window.location.hash = encodeURIComponent(JSON.stringify({ type: 'instance', sessionId: uuid }));
+
+    // Top bar device selector
+    const inst = knownInstances.find(i => i.uuid === uuid);
+    $('#devSelName').text(inst ? instanceDisplayName(inst) : ('KVM Port ' + shortUuid(uuid)));
+    $('#devSelSub').text(inst ? (inst.video_capture_dev || '') : '');
+    $('#devSelDot').addClass('on');
+
+    // Side panel connection card
+    $('#spConnection').show();
+    $('#spSessionUuid').text(uuid);
+    sessionStartTime = Date.now();
+    if (sessionTimerHandle) clearInterval(sessionTimerHandle);
+    sessionTimerHandle = setInterval(updateSessionTimer, 1000);
+    updateSessionTimer();
+    buildSidePanelLists();
+
+    // Start audio streaming automatically once the viewport is ready.
+    // (The viewport also self-starts audio; the double start is guarded.
+    // Triggering from here keeps the start inside the user-activation
+    // window of the click that opened the session.)
+    let audioRetryCount = 0;
+    const maxAudioRetries = 12;
+    function tryStartAudio() {
+        const cw = frame.contentWindow;
+        if (cw && typeof cw.startAudioWebSocket === 'function') {
+            let quality = localStorage.getItem('audioQuality');
+            if (!quality) {
+                quality = 'standard';
+                localStorage.setItem('audioQuality', quality);
+            }
+            if (quality !== 'disabled') cw.startAudioWebSocket(quality);
+        } else if (audioRetryCount < maxAudioRetries) {
+            audioRetryCount++;
+            setTimeout(tryStartAudio, 300);
+        } else {
+            console.warn('Viewport did not expose startAudioWebSocket in time');
+            $.toast({
+                message: '<i class="yellow volume off icon"></i> Remote audio did not start — click inside the session to retry',
+                duration: 5000
+            });
+        }
+    }
+    setTimeout(function () {
+        frame.contentWindow.focus();
+        tryStartAudio();
+        updateFitIcon();
+    }, 400);
+}
+
+function disconnectSession() {
+    const frame = document.getElementById('sessionContext');
+    try {
+        if (frame.contentWindow && typeof frame.contentWindow.disconnectRemote === 'function') {
+            frame.contentWindow.disconnectRemote();
+        }
+    } catch (e) { /* iframe may already be gone */ }
+    frame.src = 'no_session.html';
+    frame.style.display = 'none';
+
+    activeSessionUuid = null;
+    document.body.classList.remove('session-active');
+    window.location.hash = '';
+    if (sessionTimerHandle) { clearInterval(sessionTimerHandle); sessionTimerHandle = null; }
+
+    $('#devSelName').text('No device connected');
+    $('#devSelSub').text('Select a KVM port to connect');
+    $('#devSelDot').removeClass('on');
+    $('#spConnection').hide();
+    hideSidePanel();
+
+    $('#landing').show();
+    listInstances();
+    buildSidePanelLists();
+}
+
+function updateSessionTimer() {
+    if (!sessionStartTime) return;
+    const s = Math.floor((Date.now() - sessionStartTime) / 1000);
+    const hh = String(Math.floor(s / 3600)).padStart(2, '0');
+    const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+    const ss = String(s % 60).padStart(2, '0');
+    $('#spSessionTime').text(`${hh}:${mm}:${ss}`);
+}
+
+/* -------------------------------------------------------- side panel */
+
+function toggleSidePanel() {
+    const panel = document.getElementById('sidePanel');
+    if (panel.style.display === 'none') {
+        buildSidePanelLists();
+        panel.style.display = '';
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+function hideSidePanel() {
+    document.getElementById('sidePanel').style.display = 'none';
+}
+
+function buildSidePanelLists() {
+    const visible = visibleToolIds();
+    const $tools = $('#spToolList');
+    $tools.empty();
+    SHELL_TOOL_REGISTRY.forEach(function (tool) {
+        if (!visible.includes(tool.id)) return;
+        const needsSession = tool.scope === 'viewport';
+        const item = $(`
+            <button class="sp-item ${needsSession && !activeSessionUuid ? 'disabled' : ''}">
+                <img src="${tool.icon}" class="dez-icon" alt="">
+                <span class="sp-item-text"><b>${tool.name}</b><small>${tool.sub}</small></span>
+            </button>
+        `);
+        item.on('click', function () {
+            hideSidePanel();
+            openTool(tool.id);
+        });
+        $tools.append(item);
+    });
+
+    const $settings = $('#spSettingsList');
+    $settings.empty();
+    const settingsItem = $(`
+        <button class="sp-item ${!activeSessionUuid ? 'disabled' : ''}">
+            <img src="img/icons/settings.svg" class="dez-icon" alt="">
+            <span class="sp-item-text"><b>Settings</b><small>Session preferences and device options</small></span>
+        </button>
+    `);
+    settingsItem.on('click', function () {
+        hideSidePanel();
+        vpCall('openSettingsOverlay');
+    });
+    $settings.append(settingsItem);
+}
+
+function openTool(toolId) {
+    if (toolId === 'terminal') { openTerminalWindow(); return; }
+    if (toolId === 'iso-library') { toggleIsoLibraryWindow(); return; }
+    vpCall('dezOpenTool', toolId);
+}
+
+/* ------------------------------------------------- dark theme toggle */
+
+function updateThemeIcon() {
+    const icon = document.getElementById('tbThemeIcon');
+    if (!icon) return;
+    const dark = localStorage.getItem('dezkvm.theme') === 'dark';
+    icon.src = dark ? 'img/icons/sun.svg' : 'img/icons/moon.svg';
+    icon.closest('button').title = dark ? 'Switch to light theme' : 'Switch to dark theme';
+}
+
+function toggleDezTheme() {
+    const dark = localStorage.getItem('dezkvm.theme') === 'dark';
+    localStorage.setItem('dezkvm.theme', dark ? 'light' : 'dark');
+    // dezApplyTheme (dez-ui.js) applies locally and recurses into iframes
+    if (typeof dezApplyTheme === 'function') dezApplyTheme();
+    updateThemeIcon();
+}
+
+/* ------------------------------------------- fit-to-window toggle */
+
+// The scale-to-fit state is owned by the viewport and persisted in
+// localStorage('scaleToFit') (shared origin), so the shell can mirror it.
+function updateFitIcon() {
+    const icon = document.getElementById('tbFitIcon');
+    if (!icon) return;
+    const fitOn = localStorage.getItem('scaleToFit') === 'true';
+    // Fit enabled → "-> <-" (compress); disabled → "<- ->" (expand)
+    icon.src = fitOn ? 'img/icons/compress.svg' : 'img/icons/expand.svg';
+    icon.closest('button').title = fitOn ? 'Show actual resolution' : 'Fit to window';
+}
+
+function toggleFitFromShell() {
+    vpCall('externalToggleScaleToFit');
+    // externalToggleScaleToFit applies the change after a 100ms delay
+    setTimeout(updateFitIcon, 250);
+}
+
+/* ----------------------------------------------- ATX quick actions */
+
+function quickAtx(action, btn) {
+    if (!activeSessionUuid) return;
+
+    // Two-step arm confirmation
+    if (!btn.dataset.armed) {
+        btn.dataset.armed = '1';
+        btn.dataset.origHtml = btn.innerHTML;
+        btn.classList.add('armed');
+        btn.innerHTML = 'Confirm?';
+        setTimeout(function () {
+            delete btn.dataset.armed;
+            btn.classList.remove('armed');
+            if (btn.dataset.origHtml) btn.innerHTML = btn.dataset.origHtml;
+        }, 4000);
+        return;
+    }
+    delete btn.dataset.armed;
+    btn.classList.remove('armed');
+    btn.innerHTML = btn.dataset.origHtml;
+
+    $.ajax({
+        url: '/api/v1/atx/' + activeSessionUuid + '/trigger',
+        method: 'POST',
+        contentType: 'application/json',
+        headers: { 'dezkvm_csrf_token': csrfToken() },
+        data: JSON.stringify({ action: action }),
+        success: function () {
+            $.toast({ message: '<i class="green check icon"></i> ' + (action === 'reset_click' ? 'Reset button pressed' : 'Power button pressed'), duration: 3500 });
+        },
+        error: function (xhr) {
+            $.toast({ class: 'error', message: '<i class="red times icon"></i> ATX action failed: ' + (xhr.responseText || ''), duration: 5000 });
+        }
+    });
+}
+
+/* --------------------------------------------------- terminal windows */
+
+// Opens the Terminal Manager window (connection form + saved sessions).
+// Actual terminal sessions run in their own windows via launchTerminalSession.
+function openTerminalWindow() {
+    DezWindow({
+        id: 'terminal-manager',
+        title: 'Terminal',
+        icon: 'img/icons/terminal.svg',
+        width: 700,
+        ajax: 'tools/terminal-manager.html'
+    });
+}
+
+// Open a terminal session window auto-connecting to the given target,
+// and remember the target in the saved-sessions list. Windows are keyed by
+// target: re-opening the same saved session restores the existing (possibly
+// hidden) window instead of spawning a second SSH connection.
+function launchTerminalSession(server, port, username) {
+    const target = username + '@' + server + ':' + port;
+    const winId = 'terminal-' + target;
+
+    if (DezWindow.get(winId)) {
+        DezWindow({ id: winId }); // un-hides + focuses the existing session
+        return;
+    }
+
+    const payload = encodeURIComponent(JSON.stringify({
+        server: server,
+        port: port,
+        username: username
+    }));
+    DezWindow({
+        id: winId,
+        title: target,
+        icon: 'img/icons/terminal.svg',
+        width: 780,
+        height: 500,
+        iframe: 'terminal.html#' + payload,
+        resizable: true,
+        minimizable: true,
+        confirmClose: 'Closing this window will terminate the SSH session. Use the hide (—) button to keep it running in the background.'
+    });
+    saveTerminalSession(server, port, username);
+}
+
+// Persist a session target (deduplicated, most recent first, capped at 20).
+function saveTerminalSession(server, port, username) {
+    let sessions = [];
+    try {
+        const stored = JSON.parse(localStorage.getItem('dezkvm.terminal.sessions'));
+        if (Array.isArray(stored)) sessions = stored;
+    } catch (e) { /* start fresh */ }
+    sessions = sessions.filter(function (s) {
+        return !(s.server === server && s.port === port && s.username === username);
+    });
+    sessions.unshift({ name: username + '@' + server, server: server, port: port, username: username });
+    if (sessions.length > 20) sessions = sessions.slice(0, 20);
+    localStorage.setItem('dezkvm.terminal.sessions', JSON.stringify(sessions));
+}
+
+// Terminal iframes post connection details once the SSH session is set up
+window.addEventListener('message', function (event) {
+    if (event.data && event.data.type === 'terminalConnected') {
+        // Update the title of the window whose iframe sent this message
+        document.querySelectorAll('.dez-window').forEach(function (winEl) {
+            const frame = winEl.querySelector('iframe');
+            if (frame && frame.contentWindow === event.source) {
+                const titleEl = winEl.querySelector('.dez-window-title');
+                if (titleEl) {
+                    titleEl.textContent = event.data.username + '@' + event.data.server + ':' + event.data.port;
+                }
+            }
+        });
     }
 });
 
-/*
-    Terminal Management
-*/
+/* ------------------------------------------------- ISO library window */
 
-function renderTerminal(terminalData) {
-    let metadata = encodeURIComponent(JSON.stringify(terminalData));
-    return `
-        <div class="terminal-entry" data-terminal-id="${terminalData.id}" data-metadata="${metadata}">
-            <div class="terminal-info">
-                <div class="ui small circular basic label">
-                    <i class="terminal icon"></i> Terminal ${terminalData.displayId}
-                </div>
-                <div class="terminal-details">
-                    <strong>${terminalData.username}@${terminalData.server}:${terminalData.port}</strong>
-                </div>
-            </div>
-            <div class="terminal-actions">
-                <button class="ui small inverted basic circular icon button" onclick="closeTerminal('${terminalData.id}'); event.stopPropagation();" title="Close Terminal">
-                    <i class="times icon"></i>
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-function listTerminals() {
-    const $list = $('#terminalList');
-    $list.empty();
-    
-    const terminalArray = Object.values(terminals);
-    if (terminalArray.length === 0) {
-        $('#noTerminalsMessage').show();
-        return;
-    } else {
-        $('#noTerminalsMessage').hide();
-    }
-    
-    terminalArray.forEach(function(terminal) {
-        const $terminalEntry = $(renderTerminal(terminal));
-        $terminalEntry.on('click', function() {
-            switchTerminal(terminal.id);
-        });
-        $list.append($terminalEntry);
+function toggleIsoLibraryWindow() {
+    const existing = DezWindow.get('iso-library');
+    if (existing) { existing.close(); return; }
+    DezWindow({
+        id: 'iso-library',
+        title: 'ISO / Image Library',
+        icon: 'img/icons/disc.svg',
+        width: 640,
+        height: 520,
+        iframe: 'iso-manager.html',
+        resizable: true
     });
 }
 
-function createNewTerminal() {
-    terminalCounter++;
-    const terminalId = `terminal_${terminalCounter}`;
-    
-    // Create terminal data object
-    const terminalData = {
-        id: terminalId,
-        displayId: terminalCounter,
-        server: '',
-        port: 22,
-        username: '',
-        sessionUrl: null,
-        created: Date.now()
-    };
-    
-    // Store terminal data
-    terminals[terminalId] = terminalData;
-    
-    // Create iframe for the terminal
-    const $iframe = $('<iframe>', {
-        id: terminalId,
-        class: 'terminal-iframe',
-        src: 'terminal.html',
-        style: 'display: none; border: none; width: 100%; height: 100%;'
-    });
-    
-    // Add iframe to terminal viewport
-    $('#terminal').append($iframe);
-    
-    // Set up message listener for terminal connection details
-    window.addEventListener('message', function terminalMessageHandler(event) {
-        if (event.data && event.data.type === 'terminalConnected' && event.data.terminalId === terminalId) {
-            // Update terminal data with connection details
-            if (terminals[terminalId]) {
-                terminals[terminalId].server = event.data.server;
-                terminals[terminalId].port = event.data.port;
-                terminals[terminalId].username = event.data.username;
-                terminals[terminalId].sessionUrl = event.data.sessionUrl;
-                
-                // Refresh terminal list if it's visible
-                if ($('#terminalsTab').is(':visible')) {
-                    listTerminals();
-                }
-            }
-        }
-    });
-    
-    // Switch to the new terminal
-    switchTerminal(terminalId);
-    
-    // Hide terminal list
-    hideTerminalList();
-}
-
-function switchTerminal(terminalId) {
-    if (!terminals[terminalId]) {
-        console.error('Terminal not found:', terminalId);
-        return;
-    }
-    
-    // Show the terminal UI viewport
-    switchViewport('terminal');
-
-    // Hide all terminal iframes
-    $('.terminal-iframe').hide();
-    
-    // Show the selected terminal
-    $(`#${terminalId}`).show();
-    activeTerminalId = terminalId;
-    
-    // Switch to terminal viewport if not already there
-    if (currentTab !== 'terminal') {
-        switchViewport('terminal');
-    } else {
-        hideTerminalList();
-        $('#terminal').show();
-    }
-    
-    // Focus the terminal iframe
-    setTimeout(function() {
-        $(`#${terminalId}`).focus();
-    }, 100);
-}
-
-function closeTerminal(terminalId) {
-    if (!terminals[terminalId]) {
-        console.error('Terminal not found:', terminalId);
-        return;
-    }
-    
-    // Remove the iframe
-    $(`#${terminalId}`).remove();
-    
-    // Remove from terminals object
-    delete terminals[terminalId];
-    
-    // If this was the active terminal, switch to another or show terminal list
-    if (activeTerminalId === terminalId) {
-        activeTerminalId = null;
-        
-        // Try to switch to another terminal
-        const remainingTerminals = Object.keys(terminals);
-        if (remainingTerminals.length > 0) {
-            switchTerminal(remainingTerminals[0]);
-        } else {
-            // No terminals left, show terminal list
-            toggleTerminalList();
-        }
-    }
-    
-    // Refresh terminal list
-    listTerminals();
-}
+/* ------------------------------------------------------------ logout */
 
 function logout() {
     $.ajax({
         url: '/api/v1/logout',
         method: 'POST',
-        success: function() {
-            window.location.href = '/login.html';
-        },
-        error: function() {
-            $.toast({
-                class: 'error',
-                message: 'Logout failed. Please try again.'
-            });
+        success: function () { window.location.href = '/login.html'; },
+        error: function () {
+            $.toast({ class: 'error', message: 'Logout failed. Please try again.' });
         }
     });
 }
 
-/*
-    Instance Details Modal
-*/
+/* -------------------------------------------------- keyboard routing */
 
-function showInstanceDetails(instanceUuid) {
-    // Find the instance data from the DOM
-    let instanceData = null;
-    $('.kvm-instance').each(function() {
-        let metadata = $(this).attr('data-metadata');
-        metadata = metadata ? JSON.parse(decodeURIComponent(metadata)) : null;
-        if (metadata && metadata.uuid === instanceUuid) {
-            instanceData = metadata;
-            return false; // break the loop
-        }
-    });
+// Refocus the session viewport on stray keydowns, but never steal focus
+// from floating windows (terminal / ISO library) or open panels.
+$(document).on('keydown', function () {
+    if (!activeSessionUuid) return;
+    if (window.DezWindow && DezWindow.anyOpen()) return;
+    if (document.getElementById('sidePanel').style.display !== 'none') return;
+    if (document.getElementById('devicePanel').style.display !== 'none') return;
+    const frame = document.getElementById('sessionContext');
+    if (frame.contentWindow) frame.contentWindow.focus();
+});
 
-    console.log(instanceData);
-
-    if (!instanceData) {
-        $.toast({
-            class: 'error',
-            message: 'Instance not found.'
-        });
-        return;
+$(window).on('focus', function () {
+    if (activeSessionUuid && !(window.DezWindow && DezWindow.anyOpen())) {
+        const frame = document.getElementById('sessionContext');
+        if (frame.contentWindow) frame.contentWindow.focus();
     }
-
-    // Populate modal with instance data
-    $('#detail-uuid').text(instanceData.uuid);
-    $('#detail-video-dev').text(instanceData.video_capture_dev || 'N/A');
-    $('#detail-resolution').text(
-        `${instanceData.video_resolution_width}×${instanceData.video_resolution_height} pixels`
-    );
-    $('#detail-framerate').text(`${instanceData.video_framerate} fps`);
-    $('#detail-audio-dev').text(instanceData.audio_capture_dev || 'N/A');
-    $('#detail-audio-config').text(
-        `${instanceData.audio_channels} channels @ ${instanceData.audio_sample_rate} Hz`
-    );
-    $('#detail-aux-mcu').text(instanceData.aux_mcu_device || 'N/A');
-    $('#detail-usb-kvm').text(instanceData.usb_kvm_device || 'N/A');
-    $('#detail-mass-storage').text(instanceData.usb_mass_storage_side || 'N/A');
-    $('#detail-stream-info').text(instanceData.stream_info || 'N/A');
-
-    // Set up the connect button
-    $('#connectFromModal').off('click').on('click', function() {
-        $('#instanceDetailsModal').modal('hide');
-        startSession(instanceUuid);
-    });
-
-    // Show the modal
-    $('#instanceDetailsModal').modal('show');
-}
+});

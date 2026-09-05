@@ -2,155 +2,137 @@
 <html lang="en">
     <head>
         <meta charset="UTF-8">
-        <title>Dashboard | DezKVM</title>
+        <title>DezKVM</title>
         <meta name="csrf_token" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta name="dezkvm.csrf.token" content="{{.csrfToken}}">
         <link rel="icon" type="image/png" href="/favicon.png">
         <script src="js/jquery-3.7.1.min.js"></script>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/semantic.min.css" integrity="sha512-ySrYzxj+EI1e9xj/kRYqeDL5l1wW0IWY8pzHNTIZ+vc1D3Z14UDNPbwup4yOUmlRemYjgUXsUZ/xvCQU2ThEAw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/semantic.min.js" integrity="sha512-Y/wIVu+S+XJsDL7I+nL50kAVFLMqSdvuLqF2vMoRqiMkmvcqFjEpEgeu6Rx8tpZXKp77J8OUpMKy0m3jLYhbbw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/components/icon.min.css" integrity="sha512-TWRDyIVIf+vAIJPt6vRyjyJLwZJizD8OGF3x9ZKsGNW6DejvY+1B9x+aN86SND5ziDzbei41I+LfaZpF59j1aA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+        <link rel="stylesheet" href="css/dez-ui.css">
         <link rel="stylesheet" href="main.css">
+        <script src="js/dez-ui.js"></script>
     </head>
-    <body>
-        <div class="main-layout">
-            <nav class="sidebar">
-                <div>
-                    <div class="menu-top">
-                        <div class="logo">
-                            <img src="img/logo.svg" alt="Logo">
-                        </div>
-                        <div class="menu-options">
-                            <div class="active item" onclick="toggleLists('instances');" menu="instances"><img src="img/dashboard.svg" alt="Dashboard"></div>
-                            <div class="active item" onclick="switchViewport('session');" menu="session"><img src="img/display.svg" alt="Display"></div>
-                            <div class="item" menu="files"><img src="img/folder.svg" alt="Files"></div>
-                            <div class="item" menu="power"><img src="img/power.svg" alt="Power"></div>
-                            <div class="item" onclick="toggleLists('terminal');" menu="terminal"><img src="img/terminal.svg" alt="Terminal"></div>
-                            <div class="item" menu="logout" onclick="logout()"><img src="img/logout.svg" alt="Logout"></div>
-                        </div>
-                    </div>
-                   
-                </div>
-            </nav>
-            <main class="body-content">
-                <div id="session" class="viewport" contentfor="session">
-                    <iframe id="sessionContext" src="no_session.html"></iframe>
-                </div>
-                <div id="terminal" class="viewport" contentfor="terminal">
-                    <!-- Terminal iframes will be dynamically added here -->
-                </div>
-            </main>
-        </div>
-        <div id="instancesTab" class="ui container viewlist">
-            <div id="instanceList">
-                <div class="ui active inverted dimmer">
-                    <div class="ui text loader">Loading Instances...</div>
-                </div>
+    <body class="dez">
+        <!-- Top bar -->
+        <header id="topbar">
+            <div class="tb-left">
+                <img src="img/logo.svg" alt="DezKVM" class="tb-logo">
+                <!-- <span class="tb-title">DezKVM</span> -->
             </div>
-        </div>
-        <div id="terminalsTab" class="ui container viewlist" style="display: none;">
-            <div id="terminalList">
-                <div class="ui message" style="display: none;" id="noTerminalsMessage">
-                    <p>No active terminal sessions.</p>
-                </div>
-            </div>
-            <button class="ui fluid basic circular button" onclick="createNewTerminal()" style="margin-top: 1em;">
-                <i class="green plus icon"></i> New Terminal Connection
-            </button>
-        </div>
 
-        <!-- Instance Details Modal -->
-        <div id="instanceDetailsModal" class="ui modal">
-            <i class="close icon"></i>
-            <div class="header">
-                <i class="server icon"></i>
-                Instance Details
+            <div class="tb-device">
+                <button id="deviceSelector" onclick="toggleDevicePanel()">
+                    <img src="img/icons/display.svg" class="dez-icon" alt="">
+                    <span class="dev-text">
+                        <b id="devSelName">No device connected</b>
+                        <small id="devSelSub">Select a KVM port to connect</small>
+                    </span>
+                    <span id="devSelDot" class="status-dot"></span>
+                    <img src="img/icons/chevron-down.svg" class="dez-icon chevron" alt="">
+                </button>
+                <div id="devicePanel" class="dez-popover" style="display:none;">
+                    <div class="popover-heading">Devices</div>
+                    <div id="devicePanelList"></div>
+                </div>
             </div>
-            <div class="content">
-                <div class="ui relaxed divided list">
-                    <div class="item">
-                        <i class="large hashtag middle aligned icon"></i>
-                        <div class="content">
-                            <div class="header">Hardware UUID</div>
-                            <div class="description" id="detail-uuid"></div>
-                        </div>
-                    </div>
-                    <div class="item">
-                        <i class="large video middle aligned icon"></i>
-                        <div class="content">
-                            <div class="header">Video Capture Device</div>
-                            <div class="description" id="detail-video-dev"></div>
-                        </div>
-                    </div>
-                    <div class="item">
-                        <i class="large expand arrows alternate middle aligned icon"></i>
-                        <div class="content">
-                            <div class="header">Resolution</div>
-                            <div class="description" id="detail-resolution"></div>
-                        </div>
-                    </div>
-                    <div class="item">
-                        <i class="large clock middle aligned icon"></i>
-                        <div class="content">
-                            <div class="header">Framerate</div>
-                            <div class="description" id="detail-framerate"></div>
-                        </div>
-                    </div>
-                    <div class="item">
-                        <i class="large volume up middle aligned icon"></i>
-                        <div class="content">
-                            <div class="header">Audio Capture Device</div>
-                            <div class="description" id="detail-audio-dev"></div>
-                        </div>
-                    </div>
-                    <div class="item">
-                        <i class="large list middle aligned icon"></i>
-                        <div class="content">
-                            <div class="header">Audio Configuration</div>
-                            <div class="description" id="detail-audio-config"></div>
-                        </div>
-                    </div>
-                    <div class="item">
-                        <i class="large microchip middle aligned icon"></i>
-                        <div class="content">
-                            <div class="header">Auxiliary MCU Device</div>
-                            <div class="description" id="detail-aux-mcu"></div>
-                        </div>
-                    </div>
-                    <div class="item">
-                        <i class="large keyboard middle aligned icon"></i>
-                        <div class="content">
-                            <div class="header">USB KVM Device</div>
-                            <div class="description" id="detail-usb-kvm"></div>
-                        </div>
-                    </div>
-                    <div class="item">
-                        <i class="large hdd middle aligned icon"></i>
-                        <div class="content">
-                            <div class="header">USB Mass Storage Side</div>
-                            <div class="description" id="detail-mass-storage"></div>
-                        </div>
-                    </div>
-                    <div class="item">
-                        <i class="large info circle middle aligned icon"></i>
-                        <div class="content">
-                            <div class="header">Stream Information</div>
-                            <div class="description" id="detail-stream-info"></div>
-                        </div>
+
+            <div class="tb-right">
+                <button class="tb-btn session-only" title="Fit to window" onclick="toggleFitFromShell()">
+                    <img id="tbFitIcon" src="img/icons/expand.svg" class="dez-icon" alt="Fit">
+                </button>
+                <button class="tb-btn session-only" title="Full screen" onclick="vpCall('toggleFullScreen')">
+                    <img src="img/icons/fullscreen.svg" class="dez-icon" alt="Fullscreen">
+                </button>
+                <span class="tb-sep session-only"></span>
+                <button class="tb-btn session-only" title="On-screen keyboard" onclick="vpCall('toggleOnscreenKeyboard')">
+                    <img src="img/icons/keyboard.svg" class="dez-icon" alt="Keyboard">
+                </button>
+                <button class="tb-btn session-only" title="Tools" onclick="vpCall('dezToolboxToggle')">
+                    <img src="img/icons/toolbox.svg" class="dez-icon" alt="Tools">
+                </button>
+                <span class="tb-sep"></span>
+                <button class="tb-btn" title="Terminal" onclick="openTerminalWindow()">
+                    <img src="img/icons/terminal.svg" class="dez-icon" alt="Terminal">
+                </button>
+                <button class="tb-btn" title="ISO / Image library" onclick="toggleIsoLibraryWindow()">
+                    <img src="img/icons/disc.svg" class="dez-icon" alt="ISO Library">
+                </button>
+                <button class="tb-btn" title="Toggle dark theme" onclick="toggleDezTheme()">
+                    <img id="tbThemeIcon" src="img/icons/moon.svg" class="dez-icon" alt="Theme">
+                </button>
+                <button class="tb-btn session-only" title="Settings" onclick="vpCall('openSettingsOverlay')">
+                    <img src="img/icons/settings.svg" class="dez-icon" alt="Settings">
+                </button>
+                <button class="tb-btn" title="More" onclick="toggleSidePanel()">
+                    <img src="img/icons/ellipsis.svg" class="dez-icon" alt="More">
+                </button>
+            </div>
+        </header>
+
+        <!-- Main stage -->
+        <main id="stage">
+            <!-- Landing: instance screenshot grid -->
+            <div id="landing">
+                <div class="landing-inner">
+                    <h2 class="landing-title">KVM Ports</h2>
+                    <p class="landing-sub">Select a device to start a remote session.</p>
+                    <div id="instanceList" class="instance-grid">
+                        <div class="landing-loading"><span class="ui loader"></span> Scanning KVM ports…</div>
                     </div>
                 </div>
             </div>
-            <div class="actions">
-                <div class="ui labeled basic icon button" id="connectFromModal">
-                    <i class="green exchange icon"></i>
-                    Connect to Instance
+
+            <!-- Active session -->
+            <iframe id="sessionContext" src="no_session.html" allowfullscreen style="display:none;"></iframe>
+        </main>
+
+        <!-- Right side panel -->
+        <aside id="sidePanel" style="display:none;">
+            <div class="sp-scroll">
+                <div class="sp-section" id="spConnection" style="display:none;">
+                    <div class="sp-heading">Connection</div>
+                    <div class="sp-card">
+                        <div class="sp-conn-row">
+                            <span class="status-dot on"></span>
+                            <span>Connected</span>
+                            <span class="sp-conn-time" id="spSessionTime">00:00:00</span>
+                        </div>
+                        <div class="sp-conn-uuid" id="spSessionUuid"></div>
+                        <button class="sp-disconnect" onclick="disconnectSession()">Disconnect</button>
+                    </div>
+                    <div class="sp-quick-row">
+                        <button class="sp-quick" id="spQuickPower" onclick="quickAtx('power_click', this)">
+                            <img src="img/icons/power.svg" class="dez-icon" alt=""> Power
+                        </button>
+                        <button class="sp-quick" id="spQuickReset" onclick="quickAtx('reset_click', this)">
+                            <img src="img/icons/reset.svg" class="dez-icon" alt=""> Reset
+                        </button>
+                        <span class="sp-quick sp-hid-status">
+                            <img src="img/icons/keyboard.svg" class="dez-icon" alt=""> Keyboard / Mouse
+                            <span class="status-dot on" id="spHidDot"></span>
+                        </span>
+                    </div>
                 </div>
-                  <div class="ui black basic deny button">
-                    <i class="times icon"></i>
-                    Close
+
+                <div class="sp-section">
+                    <div class="sp-heading">Tools</div>
+                    <div id="spToolList"></div>
+                </div>
+
+                <div class="sp-section">
+                    <div class="sp-heading">Settings</div>
+                    <div id="spSettingsList"></div>
+                </div>
+
+                <div class="sp-section">
+                    <button class="sp-item sp-logout" onclick="logout()">
+                        <img src="img/icons/disconnect.svg" class="dez-icon" alt="">
+                        <span class="sp-item-text"><b>Log Out</b><small>End the DezKVM web session</small></span>
+                    </button>
                 </div>
             </div>
-        </div>
+        </aside>
 
         <script src="js/main.js"></script>
     </body>
