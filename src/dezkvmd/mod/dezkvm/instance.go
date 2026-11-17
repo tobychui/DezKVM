@@ -339,9 +339,8 @@ func (i *UsbKvmDeviceInstance) MountMassStorage() (string, error) {
 		return activeMountPoint, nil
 	}
 
-	// Mount it using the system mount command
-	cmd := exec.Command("mount", mountTarget, expectedMountPoint)
-	err = cmd.Run()
+	// Mount it with UTF-8 file names so non-ASCII names do not show up as '?'
+	err = storage.MountDevice(mountTarget, expectedMountPoint)
 	if err != nil {
 		return "", err
 	}
@@ -352,9 +351,36 @@ func (i *UsbKvmDeviceInstance) MountMassStorage() (string, error) {
 
 // UnmountMassStorage unmounts the currently mounted mass storage device for this instance.
 // Returns an error if unmounting fails.
+// errMassStorageNotMounted is returned by UnmountMassStorage when there is
+// nothing to unmount.
+var errMassStorageNotMounted = errors.New("mass storage is not mounted")
+
+// massStorageAppearTimeout bounds the wait for the USB drive after switching
+// it to the KVM side (enumeration + usb-storage settle delay is ~6 s).
+const massStorageAppearTimeout = 20 * time.Second
+
+// waitForMassStorage polls until this instance's drive is visible to the
+// kernel and udev has created its device nodes, and returns its /dev path.
+func (i *UsbKvmDeviceInstance) waitForMassStorage(timeout time.Duration) (string, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		devPath, err := i.GetMassStoragePath()
+		if err == nil {
+			// lsblk reads sysfs; the /dev nodes for the partitions are
+			// created by udev slightly later
+			_ = exec.Command("udevadm", "settle", "--timeout=5").Run()
+			return devPath, nil
+		}
+		if time.Now().After(deadline) {
+			return "", err
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
 func (i *UsbKvmDeviceInstance) UnmountMassStorage() error {
 	if i.massStorageMountPoint == "" {
-		return errors.New("mass storage is not mounted")
+		return errMassStorageNotMounted
 	}
 
 	cmd := exec.Command("umount", i.massStorageMountPoint)

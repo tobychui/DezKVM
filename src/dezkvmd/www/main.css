@@ -178,6 +178,8 @@ body.dez {
     margin: 0 6px;
 }
 body:not(.session-active) .session-only { display: none; }
+body.session-active .idle-only { display: none; }
+.tb-btn[aria-pressed="true"] { background: var(--dez-accent-soft); }
 
 /* --------------------------------------------------------------- stage */
 #stage {

@@ -396,11 +396,20 @@
 
                     <!-- WebRTC-only options -->
                     <div id="webrtcOptionsBlock" style="display:none;margin-top:1em;padding:0.9em 1em;background:var(--dez-surface-2);border:1px solid var(--dez-border);border-radius:8px;">
+                        <!-- Shown by initFirefoxWebRTCNotice() in Firefox only -->
+                        <div id="firefoxWebRTCNotice" class="ui warning message" style="display:none;margin:0 0 1em;padding:0.65em 1em;font-size:0.9em;">
+                            <div class="header">MJPEG is recommended in Firefox</div>
+                            <p style="margin:0.4em 0 0.6em;">Firefox can lag behind for several seconds with the WebRTC stream when the screen changes a lot.
+                            MJPEG mode has no such delay. Chrome and Edge handle WebRTC well.</p>
+                            <button type="button" class="ui mini button" onclick="switchStreamingModeToMJPEG()">Use MJPEG</button>
+                        </div>
                         <label style="font-size:0.85em;color:#666;display:block;margin-bottom:0.3em;">Video Encoder</label>
                         <select id="settingsVideoEncoderSelect" class="ui fluid dropdown" onchange="onStreamingSettingChanged()">
                             <option value="auto" selected>Auto (prefer hardware)</option>
                         </select>
                         <p id="videoEncoderDetail" class="field-description" style="margin:0.4em 0 0.9em;"></p>
+                        <!-- Filled by loadWebRTCEncoders() when a hardware encoder is disabled for a fixable reason -->
+                        <div id="videoEncoderHints" class="ui warning message" style="display:none;margin:0 0 0.9em;padding:0.65em 1em;font-size:0.9em;"></div>
 
                         <label style="font-size:0.85em;color:#666;display:block;margin-bottom:0.3em;">Bitrate (compression rate)</label>
                         <select id="settingsVideoBitrateSelect" class="ui fluid dropdown" onchange="onStreamingSettingChanged()">
@@ -455,13 +464,39 @@
 
                 <div class="settings-field">
                     <label>Audio Quality</label>
-                    <p class="field-description">Select the audio capture quality. Higher quality uses more bandwidth.</p>
+                    <p class="field-description">Select the audio capture quality. Higher quality uses more bandwidth.
+                    Over WebRTC the audio is compressed to Opus at 32, 64 or 128 kbps.</p>
                     <select id="settingsAudioQualitySelect" class="ui fluid dropdown" onchange="changeAudioQuality(this.value)">
                         <option value="disabled">Audio Off</option>
                         <option value="low">Low (16 kHz)</option>
                         <option value="standard">Standard (24 kHz)</option>
                         <option value="high">High (48 kHz)</option>
                     </select>
+                </div>
+
+                <div class="settings-field">
+                    <label>Audio Transport</label>
+                    <p class="field-description">In WebRTC streaming mode the audio is sent over the WebRTC connection as Opus,
+                    which needs far less bandwidth than the uncompressed WebSocket stream. MJPEG mode always uses the WebSocket.</p>
+                    <div class="ui toggle checkbox" id="audioForceWebSocketCheckbox">
+                        <input type="checkbox" id="chkAudioForceWebSocket" onchange="toggleAudioForceWebSocket(this.checked)">
+                        <label>Always transfer audio via WebSocket</label>
+                    </div>
+                    <p id="audioTransportStatus" class="field-description" style="margin:0.6em 0 0;"></p>
+                </div>
+
+                <div class="settings-field">
+                    <label>Volume Gain</label>
+                    <p class="field-description">Amplify or reduce the remote audio in this browser, up to 200%. Useful when the
+                    volume cannot be changed on the remote computer because of the HDMI capture card. Loud sounds may distort above 100%.</p>
+                    <div class="dez-slider" id="audioGainSlider">
+                        <input type="range" id="audioGainRange" min="0" max="200" step="5" value="100"
+                            aria-label="Volume gain" oninput="onAudioGainInput(this.value)">
+                        <span class="dez-slider-value" id="audioGainValue">100%</span>
+                    </div>
+                    <button type="button" class="ui mini basic button" style="margin-top:0.7em;" onclick="resetAudioGain()">
+                        <i class="undo icon"></i> Reset to 100%
+                    </button>
                 </div>
             </div>
 
@@ -1093,6 +1128,61 @@ function syncAudioDropdown(){
     $("#settingsAudioQualitySelect").val(quality);
 }
 
+/* Sync the audio transport toggle and gain slider (stored per browser) */
+function syncAudioSettings(){
+    var pct = (typeof getAudioGainPercent === 'function') ? getAudioGainPercent() : 100;
+    var range = document.getElementById('audioGainRange');
+    if(range) range.value = pct;
+    $('#audioGainValue').text(pct + '%');
+    var chk = document.getElementById('chkAudioForceWebSocket');
+    if(chk) chk.checked = (typeof audioForcedWebSocket === 'function') && audioForcedWebSocket();
+    updateAudioTransportStatus();
+}
+
+/* Gain slider moved: apply live while dragging */
+function onAudioGainInput(value){
+    var pct = parseInt(value, 10) || 0;
+    $('#audioGainValue').text(pct + '%');
+    if(typeof setRemoteAudioGain === 'function') setRemoteAudioGain(pct);
+}
+
+function resetAudioGain(){
+    var range = document.getElementById('audioGainRange');
+    if(range) range.value = 100;
+    onAudioGainInput(100);
+}
+
+/* "Always transfer audio via WebSocket" toggled */
+function toggleAudioForceWebSocket(enabled){
+    localStorage.setItem('audioForceWebSocket', enabled ? 'true' : 'false');
+    // Only a WebRTC stream is affected: it negotiates its audio track up front
+    var restarting = false;
+    if(typeof webrtcStreamActive === 'function' && webrtcStreamActive() && typeof restartRemoteAudio === 'function'){
+        restarting = restartRemoteAudio();
+    }
+    $.toast({
+        message: '<i class="ui green check circle icon"></i> ' +
+            (enabled ? 'Audio will always use the WebSocket' : 'Audio will use WebRTC in WebRTC streaming mode') +
+            (restarting ? '. Restarting the stream…' : ''),
+        duration: 3000
+    });
+    updateAudioTransportStatus();
+    setTimeout(updateAudioTransportStatus, 2500); // after the stream restarted
+}
+
+function updateAudioTransportStatus(){
+    var el = document.getElementById('audioTransportStatus');
+    if(!el) return;
+    var transport = (typeof remoteAudioTransport === 'function') ? remoteAudioTransport() : '';
+    if(transport === 'webrtc'){
+        el.innerHTML = '<i class="green circle icon"></i> Receiving audio over WebRTC (Opus)';
+    } else if(transport === 'websocket'){
+        el.innerHTML = '<i class="green circle icon"></i> Receiving audio over WebSocket';
+    } else {
+        el.innerHTML = '<i class="grey circle icon"></i> No audio is playing';
+    }
+}
+
 /* Sync scale-to-fit checkbox state */
 function syncScaleToFit(){
     var enabled = localStorage.getItem("scaleToFit") === "true";
@@ -1135,6 +1225,7 @@ if(settingsAudioSel){
     settingsAudioSel.addEventListener("change", function(){
         var orig = document.getElementById("audioQualitySelect");
         if(orig) orig.value = this.value;
+        setTimeout(updateAudioTransportStatus, 2500); // after the audio restarted
     });
 }
 
@@ -1255,7 +1346,31 @@ function loadWebRTCEncoders(){
         // Restore previous selection when still valid
         if(current){ sel.value = current; if(!sel.value) sel.value = 'auto'; }
         updateEncoderDetailText();
+        renderEncoderHints(list);
     });
+}
+
+/* Explain why a hardware encoder is disabled and how to enable it */
+function renderEncoderHints(list){
+    var box = document.getElementById('videoEncoderHints');
+    if(!box) return;
+    box.innerHTML = '';
+    var hinted = list.filter(function(enc){ return !enc.available && enc.hint; });
+    if(hinted.length === 0){ box.style.display = 'none'; return; }
+    var header = document.createElement('div');
+    header.className = 'header';
+    header.textContent = 'Hardware encoder disabled';
+    box.appendChild(header);
+    hinted.forEach(function(enc){
+        var p = document.createElement('p');
+        p.style.margin = '0.4em 0 0';
+        var b = document.createElement('b');
+        b.textContent = enc.label + ': ';
+        p.appendChild(b);
+        p.appendChild(document.createTextNode(enc.detail + '. ' + enc.hint));
+        box.appendChild(p);
+    });
+    box.style.display = '';
 }
 
 function updateEncoderDetailText(){
@@ -1285,6 +1400,7 @@ function syncStreamingSettings(prefs){
 
     document.getElementById('webrtcOptionsBlock').style.display =
         modeSel.value === 'webrtc' ? '' : 'none';
+    initFirefoxWebRTCNotice();
     document.getElementById('streamingApplyRow').style.display = 'none';
 
     if(modeSel.value === 'webrtc') loadWebRTCEncoders();
@@ -1297,7 +1413,25 @@ function onStreamingSettingChanged(){
         mode === 'webrtc' ? '' : 'none';
     if(mode === 'webrtc') loadWebRTCEncoders();
     updateEncoderDetailText();
+    initFirefoxWebRTCNotice();
     document.getElementById('streamingApplyRow').style.display = '';
+}
+
+/* Firefox lags with the WebRTC stream on large screen changes, recommend MJPEG */
+function isFirefoxBrowser(){
+    return /firefox\//i.test(navigator.userAgent);
+}
+
+function initFirefoxWebRTCNotice(){
+    var notice = document.getElementById('firefoxWebRTCNotice');
+    if(notice) notice.style.display = isFirefoxBrowser() ? '' : 'none';
+}
+
+function switchStreamingModeToMJPEG(){
+    var modeSel = document.getElementById('settingsStreamingModeSelect');
+    if(!modeSel) return;
+    modeSel.value = 'mjpeg';
+    onStreamingSettingChanged(); // hides the WebRTC block and shows "Apply"
 }
 
 /* Persist the streaming preferences and restart the video pipeline */
@@ -1504,12 +1638,16 @@ tabItems.forEach(function(item){
         if($(this).data('tab') === 'storage'){
             loadStorageInfo();
         }
+        if($(this).data('tab') === 'audio'){
+            updateAudioTransportStatus();
+        }
     });
 });
 
 window.openSettingsOverlay = function(){
     syncResolutionDropdown();
     syncAudioDropdown();
+    syncAudioSettings();
     syncScaleToFit();
     syncShowLocalCursor();
     syncAllPreferences();
@@ -1541,18 +1679,24 @@ $(document).on("keydown.settingsOverlay", function(e){
     }
 });
 
-/* One-time setup: pointer lock handlers for relative mouse mode */
+/* One-time setup: pointer lock handlers for relative mouse mode.
+   The click handler is delegated from the document because the capture
+   element is replaced when switching between MJPEG (<img>) and WebRTC
+   (<video>); a handler bound to the element itself would be lost. */
 function initPointerLockHandlers(){
+    if(window._pointerLockHandlersInstalled) return;
+    window._pointerLockHandlersInstalled = true;
     var captureEleId = (typeof cursorCaptureElementId !== 'undefined') ? cursorCaptureElementId : 'remoteCapture';
-    var captureEle = document.getElementById(captureEleId);
-    if(!captureEle) return;
 
-    // Click to re-acquire pointer lock when in relative mode
-    captureEle.addEventListener('click', function(event){
+    // Click the viewport to (re-)acquire pointer lock in relative mode
+    document.addEventListener('click', function(event){
         if(typeof mouseMoveAbsolute === 'undefined' || mouseMoveAbsolute) return;
+        if(typeof sessionTakenOver !== 'undefined' && sessionTakenOver) return;
+        var captureEle = document.getElementById(captureEleId);
+        if(!captureEle || event.target !== captureEle) return;
         event.preventDefault();
         captureEle.focus();
-        if(!document.pointerLockElement){
+        if(!document.pointerLockElement && captureEle.requestPointerLock){
             captureEle.requestPointerLock();
         }
     });
@@ -1571,6 +1715,7 @@ function initPointerLockHandlers(){
         }
     });
 };
+initPointerLockHandlers();
 
 
 /* 

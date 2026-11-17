@@ -11,6 +11,9 @@ package videnc
 	  BackendIntelVAAPI  - Intel iGPU via VA-API (h264_vaapi). AMD iGPU
 	                       support can later reuse this backend since it is
 	                       also VA-API based.
+	  BackendRockchipMPP - Rockchip VEPU hardware encoder through MPP
+	                       (h264_rkmpp). Needs the ffmpeg-rockchip fork, see
+	                       platforms/rockchip/install_ffmpeg_rkmpp.sh.
 	  BackendV4L2M2M     - Kernel V4L2 memory-to-memory hardware encoders
 	                       (h264_v4l2m2m). Variant selects the board family:
 	                       VariantRaspberryPi (bcm2835-codec, /dev/video11)
@@ -40,10 +43,11 @@ import (
 type Backend string
 
 const (
-	BackendAuto       Backend = "auto"        // pick the best available backend
-	BackendIntelVAAPI Backend = "intel-vaapi" // Intel iGPU via VA-API
-	BackendV4L2M2M    Backend = "v4l2m2m"     // V4L2 memory-to-memory (SBC hardware encoders)
-	BackendSoftware   Backend = "software"    // libx264 software fallback
+	BackendAuto        Backend = "auto"        // pick the best available backend
+	BackendIntelVAAPI  Backend = "intel-vaapi" // Intel iGPU via VA-API
+	BackendRockchipMPP Backend = "rkmpp"       // Rockchip MPP (h264_rkmpp, ffmpeg-rockchip)
+	BackendV4L2M2M     Backend = "v4l2m2m"     // V4L2 memory-to-memory (SBC hardware encoders)
+	BackendSoftware    Backend = "software"    // libx264 software fallback
 )
 
 // Variant selects a board family for backends that need device-specific
@@ -125,6 +129,19 @@ func New(cfg Config) (Encoder, error) {
 		}
 		return newFFmpegEncoder("Intel iGPU (VA-API h264_vaapi)", buildIntelVAAPIArgs(resolved)), nil
 
+	case BackendRockchipMPP:
+		if avail, detail, _ := rkmppAvailable(); !avail {
+			return nil, fmt.Errorf("%w: rkmpp: %s", ErrBackendUnavailable, detail)
+		}
+		name := "Rockchip MPP hardware encoder (h264_rkmpp, software JPEG decode)"
+		if rkmppHWDecode {
+			name = "Rockchip MPP hardware encoder (h264_rkmpp, hardware JPEG decode)"
+		}
+		enc := newFFmpegEncoderBin(name, rkmppFFmpegBin, buildRKMPPArgs(resolved, rkmppHWDecode))
+		// The hardware JPEG decoder hangs on corrupt frames, keep them out
+		enc.validateJPEG = rkmppHWDecode
+		return enc, nil
+
 	case BackendV4L2M2M:
 		if avail, detail := v4l2m2mAvailable(resolved.Variant); !avail {
 			return nil, fmt.Errorf("%w: v4l2m2m(%s): %s", ErrBackendUnavailable, variantLabel(resolved.Variant), detail)
@@ -144,10 +161,13 @@ func New(cfg Config) (Encoder, error) {
 }
 
 // pickAutoBackend returns the preferred backend for this host:
-// Intel VA-API > V4L2 M2M > software.
+// Intel VA-API > Rockchip MPP > V4L2 M2M > software.
 func pickAutoBackend(variant Variant) Backend {
 	if avail, _ := intelVAAPIAvailable(defaultRenderDevice); avail {
 		return BackendIntelVAAPI
+	}
+	if avail, _, _ := rkmppAvailable(); avail {
+		return BackendRockchipMPP
 	}
 	if avail, _ := v4l2m2mAvailable(variant); avail {
 		return BackendV4L2M2M
@@ -176,7 +196,7 @@ func ParseBackendString(s string) (Backend, Variant) {
 		variant = Variant(parts[1])
 	}
 	switch backend {
-	case BackendAuto, BackendIntelVAAPI, BackendV4L2M2M, BackendSoftware:
+	case BackendAuto, BackendIntelVAAPI, BackendRockchipMPP, BackendV4L2M2M, BackendSoftware:
 		return backend, variant
 	}
 	return BackendAuto, VariantNone

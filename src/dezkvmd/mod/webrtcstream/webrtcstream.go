@@ -1,12 +1,14 @@
 package webrtcstream
 
 /*
-	webrtcstream - WebRTC H.264 video streaming for DezKVM
+	webrtcstream - WebRTC H.264 video (+ Opus audio) streaming for DezKVM
 
 	Bridges the MJPEG frames captured from the HDMI capture card to a WebRTC
 	peer connection: MJPEG frames are piped into a videnc encoder (hardware
 	when available), and the resulting H.264 Annex-B stream is packetised
-	into RTP by pion and delivered to the browser.
+	into RTP by pion and delivered to the browser. When the browser asks for
+	audio, the capture card's PCM audio is encoded to Opus and sent on the
+	same peer connection (see audio.go).
 
 	Signaling is a single non-trickle offer/answer exchange over HTTPS
 	(WHEP-style): the browser POSTs an SDP offer and receives the answer once
@@ -24,6 +26,8 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -49,6 +53,11 @@ type Options struct {
 	BitrateKbps int
 	// STUNServers used for ICE. Leave empty for host candidates only.
 	STUNServers []string
+
+	// Audio, when set and the browser's offer has an audio section, adds an
+	// Opus audio track fed from this source.
+	Audio            AudioSource
+	AudioBitrateKbps int
 }
 
 // DefaultSTUNServers gives remote clients a chance to connect across NAT.
@@ -59,12 +68,21 @@ type Session struct {
 	pc         *webrtc.PeerConnection
 	encoder    videnc.Encoder
 	videoTrack *webrtc.TrackLocalStaticSample
+	audioTrack *webrtc.TrackLocalStaticSample // nil when not sending audio
+	audioCmd   *exec.Cmd                      // ffmpeg Opus encoder
 	cancel     context.CancelFunc
 
 	mu     sync.Mutex
 	closed bool
 
 	EncoderName string
+
+	// HasAudio is true when the session sends Opus audio. AudioError says
+	// why audio was requested but could not be set up (the browser then
+	// uses the audio websocket instead).
+	HasAudio     bool
+	AudioEncoder string
+	AudioError   string
 }
 
 // StartSession creates the encoder + peer connection, answers the given SDP
@@ -130,6 +148,16 @@ func StartSession(src FrameSource, offerSDP string, opt Options) (*Session, *web
 		videoTrack:  track,
 		cancel:      cancel,
 		EncoderName: enc.Name(),
+	}
+
+	// --- Audio (optional) ----------------------------------------------
+	// Only when the browser offered to receive audio: a track without a
+	// matching m-line in the offer would never be sent.
+	if opt.Audio != nil && strings.Contains(offerSDP, "m=audio") {
+		if err := session.setupAudio(ctx, opt); err != nil {
+			log.Printf("WebRTC audio unavailable, video only: %v\n", err)
+			session.AudioError = err.Error()
+		}
 	}
 
 	// Tear the whole session down when the browser goes away.
@@ -309,6 +337,26 @@ func (s *Session) pumpEncodedStream(fps int) {
 	}
 }
 
+// setupAudio adds the Opus track and starts the audio pipeline.
+func (s *Session) setupAudio(ctx context.Context, opt Options) error {
+	if _, err := opusEncoder(); err != nil {
+		return err
+	}
+	track, err := newAudioTrack()
+	if err != nil {
+		return err
+	}
+	if _, err := s.pc.AddTrack(track); err != nil {
+		return err
+	}
+	s.audioTrack = track
+	if err := s.startAudio(ctx, opt.Audio, opt.AudioBitrateKbps); err != nil {
+		return err
+	}
+	s.HasAudio = true
+	return nil
+}
+
 func (s *Session) isClosed() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -329,6 +377,9 @@ func (s *Session) Close() {
 	s.cancel()
 	if s.encoder != nil {
 		s.encoder.Close()
+	}
+	if s.audioCmd != nil && s.audioCmd.Process != nil {
+		s.audioCmd.Process.Kill() // reaped by the audio pump goroutine
 	}
 	if s.pc != nil {
 		s.pc.Close()

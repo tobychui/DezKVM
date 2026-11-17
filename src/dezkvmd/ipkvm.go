@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/gorilla/csrf"
 	"imuslab.com/dezkvm/dezkvmd/mod/auth"
@@ -19,6 +20,9 @@ import (
 	"imuslab.com/dezkvm/dezkvmd/mod/sshprox"
 	"imuslab.com/dezkvm/dezkvmd/mod/thumbnails"
 )
+
+// shutdownTimeout is the max time allowed for a graceful shutdown before force exit
+const shutdownTimeout = 5 * time.Second
 
 var (
 	dezkvmManager      *dezkvm.DezkVM
@@ -115,11 +119,24 @@ func init_ipkvm_mode() error {
 	handle_root_routing(listeningServerMux)
 
 	// Handle program exit to close the HID controller
-	c := make(chan os.Signal, 1)
+	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		log.Println("Shutting down DezKVM...")
+		log.Println("Shutting down DezKVM... (press Ctrl+C again to force quit)")
+
+		// Closing CDC ACM serial ports can hang in the kernel. Never let that
+		// keep the process (and its open ports) alive, otherwise the next
+		// dezkvmd instance will fight it over the serial devices.
+		go func() {
+			select {
+			case <-c:
+				log.Println("Second interrupt received, forcing exit")
+			case <-time.After(shutdownTimeout):
+				log.Printf("Shutdown did not finish within %v, forcing exit", shutdownTimeout)
+			}
+			os.Exit(1)
+		}()
 
 		if dezkvmManager != nil {
 			dezkvmManager.Close()
@@ -142,6 +159,9 @@ func init_ipkvm_mode() error {
 
 	// Register Terminal related APIs
 	register_terminal_apis(listeningServerMux)
+
+	// Register maintenance mode (host management) APIs
+	register_maintenance_apis(listeningServerMux)
 
 	fmt.Println("Listening on https://localhost:9000")
 
@@ -188,6 +208,9 @@ func handle_root_routing(mux *http.ServeMux) {
 		if path == "/" {
 			path = "/index.html"
 		}
+		// Always revalidate: without this, browsers keep running cached
+		// copies of the frontend scripts for hours after an update
+		w.Header().Set("Cache-Control", "no-cache")
 		if strings.HasSuffix(path, ".html") {
 			// Read the HTML file from disk
 			targetFilePath := filepath.Join("www", filepath.Clean(path))

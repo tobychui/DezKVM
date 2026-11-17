@@ -6,6 +6,8 @@ import (
 	"imuslab.com/dezkvm/dezkvmd/mod/kvmhid"
 	"imuslab.com/dezkvm/dezkvmd/mod/usbcapture"
 	"imuslab.com/dezkvm/dezkvmd/mod/webrtcstream"
+	"sync"
+	"time"
 )
 
 type UsbKvmDeviceOption struct {
@@ -48,7 +50,7 @@ type UsbKvmPreferences struct {
 
 	/* Video Streaming Preferences */
 	StreamingMode       string `json:"streaming_mode"`        // "mjpeg" (default) or "webrtc"
-	VideoEncoder        string `json:"video_encoder"`         // videnc backend: auto | intel-vaapi | v4l2m2m | software
+	VideoEncoder        string `json:"video_encoder"`         // videnc backend: auto | intel-vaapi | rkmpp | v4l2m2m | software
 	VideoEncoderVariant string `json:"video_encoder_variant"` // v4l2m2m board variant: raspberrypi | orangepi
 	VideoBitrateKbps    int    `json:"video_bitrate_kbps"`    // target H.264 bitrate for WebRTC mode
 }
@@ -81,11 +83,15 @@ type UsbKvmDeviceInstance struct {
 	videoResoltuionConfig *usbcapture.CaptureResolution
 
 	/* Internals */
-	uuid                  string // Device group UUID obtained from AuxMCU
-	massStorageUUID       string // UUID for mass storage device (if applicable, empty means this instance does not have mass storage functionality)
-	massStorageMountPoint string // Active mount point for the mass storage device (empty when not mounted)
-	isoWriteJob           *storage.ISOWriteJob   // Progress tracker for ISO / image writes onto the mass storage device
-	webrtcSession         *webrtcstream.Session  // Active WebRTC video session (nil when using MJPEG streaming)
+	uuid                  string                // Device group UUID obtained from AuxMCU
+	massStorageUUID       string                // UUID for mass storage device (if applicable, empty means this instance does not have mass storage functionality)
+	massStorageMountPoint string                // Active mount point for the mass storage device (empty when not mounted)
+	isoWriteJob           *storage.ISOWriteJob  // Progress tracker for ISO / image writes onto the mass storage device
+	webrtcSession         *webrtcstream.Session // Active WebRTC video session (nil when using MJPEG streaming)
+	webrtcClientID        string                // Client ID of the page that owns webrtcSession
+	videoOwnerMu          sync.Mutex            // Guards videoOwner
+	videoOwner            string                // Client ID of the page that last started a video stream
+	revokedClients        map[string]time.Time  // Client IDs of pages that were taken over (see session_owner.go)
 	usbKVMController      *kvmhid.Controller
 	auxMCUController      *kvmaux.AuxMcu
 	usbCaptureDevice      *usbcapture.Instance

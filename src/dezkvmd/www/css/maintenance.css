@@ -1,0 +1,324 @@
+/*
+    maintenance.css — Maintenance mode view of the shell (index.html)
+    Live tiles, usage charts, process table, host power controls.
+    Logic: js/maintenance.js
+*/
+
+/* Chart and status colours (validated categorical slots 1-2, see
+   js/maintenance.js); dark steps for the dark surface */
+.mt-root {
+    --mt-series-1: #2a78d6;
+    --mt-series-2: #eb6834;
+    --mt-good: #0ca30c;
+    --mt-warning: #fab219;
+    --mt-critical: #d03b3b;
+    --mt-grid: #e9eaed;
+    --mt-axis: #c3c5ca;
+}
+body.dez-dark .mt-root {
+    --mt-series-1: #3987e5;
+    --mt-series-2: #d95926;
+    --mt-grid: #2f2f33;
+    --mt-axis: #45454b;
+}
+
+#maintenance {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    background: var(--dez-bg);
+}
+.mt-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 34px 26px 60px;
+}
+.mt-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+.mt-hostline { margin-bottom: 22px; }
+
+/* ---------------------------------------------------------- tiles */
+.mt-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 14px;
+}
+.mt-tile {
+    background: var(--dez-surface);
+    border: 1px solid var(--dez-border);
+    border-radius: var(--dez-radius);
+    padding: 14px 16px;
+    min-width: 0;
+}
+.mt-tile-label {
+    font-size: 0.82em;
+    color: var(--dez-text-sub);
+    margin-bottom: 4px;
+}
+.mt-tile-value {
+    font-size: 1.6em;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--dez-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.mt-net-value {
+    font-size: 1.05em;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.mt-arrow { color: var(--dez-text-sub); font-weight: 400; }
+.mt-tile-sub {
+    font-size: 0.8em;
+    color: var(--dez-text-sub);
+    margin-top: 6px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+/* Meter: the fill carries the severity, the track is a light step of the
+   same colour so the state reads across the whole bar */
+.mt-meter {
+    --mt-fill: var(--mt-series-1);
+    height: 6px;
+    border-radius: 999px;
+    margin-top: 8px;
+    background: color-mix(in srgb, var(--mt-fill) 20%, var(--dez-surface));
+    overflow: hidden;
+}
+.mt-meter > span {
+    display: block;
+    height: 100%;
+    width: 0;
+    border-radius: 999px;
+    background: var(--mt-fill);
+    transition: width 0.4s ease;
+}
+.mt-meter.warning  { --mt-fill: var(--mt-warning); }
+.mt-meter.critical { --mt-fill: var(--mt-critical); }
+
+/* Status badge (temperature): icon + label, never colour alone */
+.mt-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 500;
+    color: var(--dez-text);
+}
+.mt-status::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--mt-good);
+}
+.mt-status.warning::before  { background: var(--mt-warning); }
+.mt-status.critical::before { background: var(--mt-critical); }
+
+/* -------------------------------------------------------- sections */
+.mt-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 30px 0 12px;
+}
+.mt-section-head h3 { margin: 0; font-size: 1.1em; font-weight: 600; }
+.mt-section-head h3 small { font-weight: 400; color: var(--dez-text-sub); font-size: 0.8em; margin-left: 6px; }
+
+.mt-card {
+    background: var(--dez-surface);
+    border: 1px solid var(--dez-border);
+    border-radius: var(--dez-radius);
+    padding: 14px 16px;
+    min-width: 0;
+}
+.mt-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+.mt-card-head h4 { margin: 0; font-size: 0.95em; font-weight: 600; }
+.mt-link {
+    background: none;
+    border: none;
+    padding: 2px 4px;
+    font: inherit;
+    font-size: 0.82em;
+    color: var(--dez-accent);
+    cursor: pointer;
+    border-radius: 4px;
+}
+.mt-link:hover { text-decoration: underline; }
+
+/* ---------------------------------------------------------- charts */
+.mt-charts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 14px;
+}
+.mt-chart { position: relative; min-height: 236px; }
+.mt-chart.refreshing svg { opacity: 0.6; }
+.mt-chart svg { display: block; width: 100%; overflow: visible; }
+.mt-chart svg:focus { outline: none; }
+.mt-chart svg:focus-visible { outline: 2px solid var(--dez-accent); outline-offset: 2px; border-radius: 4px; }
+.mt-chart .mt-axis-text {
+    fill: var(--dez-text-sub);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+.mt-chart .mt-end-text { fill: var(--dez-text); font-size: 11px; font-weight: 600; }
+.mt-chart .mt-grid { stroke: var(--mt-grid); stroke-width: 1; shape-rendering: crispEdges; }
+.mt-chart .mt-baseline { stroke: var(--mt-axis); stroke-width: 1; shape-rendering: crispEdges; }
+.mt-chart .mt-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.mt-chart .mt-crosshair { stroke: var(--dez-text-sub); stroke-width: 1; shape-rendering: crispEdges; }
+.mt-chart .mt-dot { stroke: var(--dez-surface); stroke-width: 2; }
+
+.mt-legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 0.82em;
+    color: var(--dez-text-sub);
+    margin-bottom: 4px;
+}
+.mt-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.mt-key {
+    display: inline-block;
+    width: 14px;
+    height: 2px;
+    border-radius: 1px;
+}
+
+.mt-tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: var(--dez-surface);
+    border: 1px solid var(--dez-border);
+    border-radius: var(--dez-radius-sm);
+    box-shadow: var(--dez-shadow);
+    padding: 7px 10px;
+    font-size: 0.82em;
+    white-space: nowrap;
+    z-index: 5;
+}
+.mt-tooltip .mt-tt-time { color: var(--dez-text-sub); margin-bottom: 4px; }
+.mt-tooltip .mt-tt-row { display: flex; align-items: center; gap: 7px; }
+.mt-tooltip .mt-tt-row b { font-weight: 600; color: var(--dez-text); font-variant-numeric: tabular-nums; }
+.mt-tooltip .mt-tt-row span { color: var(--dez-text-sub); }
+
+.mt-chart-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 220px;
+    color: var(--dez-text-sub);
+    text-align: center;
+    padding: 0 20px;
+}
+
+/* Table view of a chart */
+.mt-chart-table-wrap { max-height: 236px; overflow-y: auto; }
+.mt-chart-table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+.mt-chart-table th, .mt-chart-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--dez-border);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.mt-chart-table th:first-child, .mt-chart-table td:first-child { text-align: left; }
+.mt-chart-table th {
+    position: sticky;
+    top: 0;
+    background: var(--dez-surface);
+    color: var(--dez-text-sub);
+    font-weight: 500;
+}
+
+/* ------------------------------------------------------- processes */
+.mt-proc-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.mt-proc-tools input[type="text"] { width: 240px; max-width: 100%; }
+.mt-proc-card { padding: 0; overflow: hidden; }
+.mt-proc-scroll { max-height: 460px; overflow: auto; }
+.mt-proc-table { width: 100%; border-collapse: collapse; font-size: 0.86em; }
+.mt-proc-table th, .mt-proc-table td {
+    padding: 7px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--dez-border);
+    white-space: nowrap;
+}
+.mt-proc-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--dez-surface-2);
+    color: var(--dez-text-sub);
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+}
+.mt-proc-table th:hover { color: var(--dez-text); }
+.mt-proc-table th[aria-sort="ascending"]::after  { content: " ▲"; font-size: 0.8em; }
+.mt-proc-table th[aria-sort="descending"]::after { content: " ▼"; font-size: 0.8em; }
+.mt-proc-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.mt-proc-table td.mt-cmd {
+    max-width: 420px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--dez-text-sub);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.92em;
+}
+.mt-proc-table tbody tr:hover { background: var(--dez-surface-2); }
+.mt-proc-table tr.mt-kernel td { color: var(--dez-text-sub); }
+.mt-empty { text-align: center !important; color: var(--dez-text-sub); padding: 24px !important; }
+
+/* ----------------------------------------------------------- power */
+.mt-power-card p { margin: 0 0 14px; color: var(--dez-text-sub); line-height: 1.5; max-width: 720px; }
+.mt-power-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+img.dez-icon.mt-icon-light { filter: invert(1) brightness(2); width: 16px; height: 16px; }
+body.dez-dark img.dez-icon.mt-icon-light { filter: invert(1) brightness(2); }
+
+.mt-field-label { display: block; font-weight: 600; margin: 4px 0 6px; }
+.mt-password { width: 100%; }
+.mt-error { color: var(--dez-red); font-size: 0.88em; min-height: 1.3em; margin-top: 6px; }
+
+#mtPowerOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 6000;
+    background: rgba(10, 10, 12, 0.72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+.mt-overlay-box {
+    background: var(--dez-surface);
+    color: var(--dez-text);
+    border-radius: var(--dez-radius);
+    box-shadow: var(--dez-shadow-lg);
+    padding: 28px 30px;
+    width: min(92vw, 420px);
+    text-align: center;
+}
+.mt-overlay-box h2 { margin: 14px 0 6px; font-size: 1.2em; }
+.mt-overlay-box p { margin: 0 0 14px; color: var(--dez-text-sub); line-height: 1.5; }
+body.dez-dark .mt-overlay-box .ui.loader { border-color: rgba(255,255,255,0.15); border-top-color: rgba(255,255,255,0.7); }
+
+@media (max-width: 640px) {
+    .mt-inner { padding: 22px 16px 40px; }
+    .mt-charts { grid-template-columns: 1fr; }
+    .mt-proc-tools input[type="text"] { width: 100%; }
+}

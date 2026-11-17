@@ -86,7 +86,7 @@ $(document).ready(function () {
 
     // Refresh the landing grid periodically while it is visible
     setInterval(function () {
-        if (!activeSessionUuid) listInstances();
+        if (!activeSessionUuid && !(window.maintenanceModeActive && maintenanceModeActive())) listInstances();
     }, 30000);
 
     // Session resume via URL hash
@@ -215,6 +215,8 @@ document.addEventListener('mousedown', function (e) {
 /* ---------------------------------------------------- session control */
 
 function startSession(uuid) {
+    // Maintenance mode is only available without a session
+    if (typeof exitMaintenanceMode === 'function') exitMaintenanceMode();
     const frame = document.getElementById('sessionContext');
     frame.src = `/viewport.html?ts=${Date.now()}#${uuid}`;
     frame.style.display = '';
@@ -247,18 +249,19 @@ function startSession(uuid) {
     const maxAudioRetries = 12;
     function tryStartAudio() {
         const cw = frame.contentWindow;
-        if (cw && typeof cw.startAudioWebSocket === 'function') {
+        if (cw && typeof cw.startRemoteAudio === 'function') {
             let quality = localStorage.getItem('audioQuality');
             if (!quality) {
                 quality = 'standard';
                 localStorage.setItem('audioQuality', quality);
             }
-            if (quality !== 'disabled') cw.startAudioWebSocket(quality);
+            // Picks WebRTC or the websocket, depending on the stream mode
+            if (quality !== 'disabled') cw.startRemoteAudio(quality);
         } else if (audioRetryCount < maxAudioRetries) {
             audioRetryCount++;
             setTimeout(tryStartAudio, 300);
         } else {
-            console.warn('Viewport did not expose startAudioWebSocket in time');
+            console.warn('Viewport did not expose startRemoteAudio in time');
             $.toast({
                 message: '<i class="yellow volume off icon"></i> Remote audio did not start — click inside the session to retry',
                 duration: 5000

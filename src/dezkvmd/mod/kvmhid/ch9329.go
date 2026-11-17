@@ -27,14 +27,7 @@ func (c *Controller) ConfigureChipTo115200() error {
 	setCmd := append([]byte{0x57, 0xAB, 0x00, 0x09, 0x32}, currentConfig[:50]...)
 	setCmd = append(setCmd, calcChecksum(setCmd[:len(setCmd)-1]))
 
-	err = c.Send(setCmd)
-	if err != nil {
-		fmt.Printf("Error sending configuration command: %v\n", err)
-		return errors.New("failed to send configuration command")
-	}
-
-	// Wait for the reply
-	resp, err := c.WaitForReply(0x09)
+	resp, err := c.transact(setCmd, 0x09, hidConfigReplyTimeout)
 	if err != nil {
 		fmt.Printf("Error waiting for reply: %v\n", err)
 		return errors.New("failed to get reply")
@@ -65,14 +58,7 @@ func (c *Controller) ConfigureChipToMode2() error {
 	// Prepare the command to set the new configuration
 	setCmd := append([]byte{0x57, 0xAB, 0x00, 0x09, 0x32}, currentConfig[:50]...)
 	setCmd = append(setCmd, calcChecksum(setCmd[:len(setCmd)-1]))
-	err = c.Send(setCmd)
-	if err != nil {
-		fmt.Printf("Error sending configuration command: %v\n", err)
-		return errors.New("failed to send configuration command")
-	}
-
-	// Wait for the reply
-	resp, err := c.WaitForReply(0x09)
+	resp, err := c.transact(setCmd, 0x09, hidConfigReplyTimeout)
 	if err != nil {
 		fmt.Printf("Error waiting for reply: %v\n", err)
 		return errors.New("failed to get reply")
@@ -100,11 +86,7 @@ func (c *Controller) WriteChipProperties() ([]byte, error) {
 
 	manufacturerString[14] = calcChecksum(manufacturerString[:14])
 	// Send set manufacturer string
-	err := c.Send(manufacturerString)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send manufacturer string: %v", err)
-	}
-	_, err = c.WaitForReply(0x0B)
+	_, err := c.transact(manufacturerString, 0x0B, hidConfigReplyTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get manufacturer string response: %v", err)
 	}
@@ -120,11 +102,7 @@ func (c *Controller) WriteChipProperties() ([]byte, error) {
 
 	productString[13] = calcChecksum(productString[:13])
 	// Send set product string
-	err = c.Send(productString)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send product string: %v", err)
-	}
-	_, err = c.WaitForReply(0x0B)
+	_, err = c.transact(productString, 0x0B, hidConfigReplyTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get product string response: %v", err)
 	}
@@ -143,13 +121,7 @@ func (c *Controller) GetChipCurrentConfiguration() ([]byte, error) {
 	}
 
 	cmd[5] = calcChecksum(cmd[:5])
-	err := c.Send(cmd)
-	if err != nil {
-		fmt.Printf("Error sending command: %v\n", err)
-		return nil, errors.New("failed to send command")
-	}
-
-	resp, err := c.WaitForReply(0x08)
+	resp, err := c.transact(cmd, 0x08, hidConfigReplyTimeout)
 	if err != nil {
 		fmt.Printf("Error waiting for reply: %v\n", err)
 		return nil, errors.New("failed to get reply")
@@ -177,13 +149,7 @@ func (c *Controller) ChipSoftReset() error {
 	}
 
 	cmd[5] = calcChecksum(cmd[:5])
-	err := c.Send(cmd)
-	if err != nil {
-		fmt.Printf("Error sending command: %v\n", err)
-		return errors.New("failed to send command")
-	}
-
-	_, err = c.WaitForReply(0x0F)
+	_, err := c.transact(cmd, 0x0F, hidConfigReplyTimeout)
 	if err != nil {
 		fmt.Printf("Error waiting for reply: %v\n", err)
 		return errors.New("failed to get reply")

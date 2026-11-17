@@ -6,9 +6,64 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
+
+// CloseCodeTakenOver is the websocket close code sent to a client whose
+// session was taken over by another browser (4000-4999 is for applications).
+const CloseCodeTakenOver = 4001
+
+// hidClient is one connected HID websocket.
+type hidClient struct {
+	id   string       // client ID chosen by the browser page (?client=)
+	kick func(string) // disconnects the client with a takeover notice
+}
+
+// takeoverNotice is pushed to a client before it is disconnected.
+type takeoverNotice struct {
+	Type   string `json:"type"` // "takeover"
+	Reason string `json:"reason"`
+}
+
+// KickOtherClients disconnects every HID websocket that does not belong to
+// keepID, telling the page its session was taken over. Sockets without an ID
+// (pages running an old cached frontend) are only kicked by a page that has
+// an ID, never by another ID-less request, so they cannot disconnect
+// themselves. It returns the client IDs that were disconnected.
+func (c *Controller) KickOtherClients(keepID string, reason string) []string {
+	c.clientsMu.Lock()
+	var victims []*hidClient
+	for cl := range c.clients {
+		if cl.id != keepID {
+			victims = append(victims, cl)
+		}
+	}
+	c.clientsMu.Unlock()
+	ids := make([]string, 0, len(victims))
+	for _, cl := range victims {
+		cl.kick(reason)
+		ids = append(ids, cl.id)
+	}
+	return ids
+}
+
+func (c *Controller) addClient(cl *hidClient) {
+	c.clientsMu.Lock()
+	defer c.clientsMu.Unlock()
+	if c.clients == nil {
+		c.clients = make(map[*hidClient]struct{})
+	}
+	c.clients[cl] = struct{}{}
+}
+
+func (c *Controller) removeClient(cl *hidClient) {
+	c.clientsMu.Lock()
+	defer c.clientsMu.Unlock()
+	delete(c.clients, cl)
+}
 
 // upgrader is used to upgrade HTTP connections to WebSocket connections
 var upgrader = websocket.Upgrader{
@@ -35,8 +90,29 @@ func (c *Controller) HIDWebSocketHandler(w http.ResponseWriter, r *http.Request)
 	}
 	defer conn.Close()
 
-	// Synchronize websocket writes (consumer ACKs vs. any future server pushes)
+	// Synchronize websocket writes (consumer ACKs vs. takeover notices)
 	var wsMu sync.Mutex
+
+	// Register so another browser taking over the session can disconnect
+	// this one. A kicked client's further input is ignored right away,
+	// even before its socket finishes closing.
+	var kicked atomic.Bool
+	client := &hidClient{id: r.URL.Query().Get("client")}
+	client.kick = func(reason string) {
+		if kicked.Swap(true) {
+			return
+		}
+		wsMu.Lock()
+		_ = conn.WriteJSON(takeoverNotice{Type: "takeover", Reason: reason})
+		wsMu.Unlock()
+		_ = conn.WriteControl(websocket.CloseMessage,
+			websocket.FormatCloseMessage(CloseCodeTakenOver, "session taken over"),
+			time.Now().Add(time.Second))
+		// Drop the connection even if the page never answers the close
+		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	}
+	c.addClient(client)
+	defer c.removeClient(client)
 
 	// Bounded command queue:
 	// When full, the oldest command is dropped so new events are not
@@ -78,6 +154,10 @@ func (c *Controller) HIDWebSocketHandler(w http.ResponseWriter, r *http.Request)
 				log.Println("Error reading message:", err)
 			}
 			break
+		}
+
+		if kicked.Load() {
+			continue // taken over: wait for the close, ignore input
 		}
 
 		var hidCmd HIDCommand

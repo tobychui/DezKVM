@@ -11,6 +11,7 @@
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fomantic-ui/2.9.4/components/icon.min.css" integrity="sha512-TWRDyIVIf+vAIJPt6vRyjyJLwZJizD8OGF3x9ZKsGNW6DejvY+1B9x+aN86SND5ziDzbei41I+LfaZpF59j1aA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
         <link rel="stylesheet" href="css/dez-ui.css">
         <link rel="stylesheet" href="main.css">
+        <link rel="stylesheet" href="css/maintenance.css">
         <script src="js/dez-ui.js"></script>
     </head>
     <body class="dez">
@@ -52,6 +53,9 @@
                     <img src="img/icons/toolbox.svg" class="dez-icon" alt="Tools">
                 </button>
                 <span class="tb-sep"></span>
+                <button class="tb-btn idle-only" id="tbMaintenanceBtn" title="Maintenance mode" aria-pressed="false" onclick="toggleMaintenanceMode()">
+                    <img src="img/icons/maintenance.svg" class="dez-icon" alt="Maintenance mode">
+                </button>
                 <button class="tb-btn" title="Terminal" onclick="openTerminalWindow()">
                     <img src="img/icons/terminal.svg" class="dez-icon" alt="Terminal">
                 </button>
@@ -79,6 +83,135 @@
                     <p class="landing-sub">Select a device to start a remote session.</p>
                     <div id="instanceList" class="instance-grid">
                         <div class="landing-loading"><span class="ui loader"></span> Scanning KVM ports…</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Maintenance mode: manage the dezkvmd host (no session) -->
+            <div id="maintenance" class="mt-root" style="display:none;">
+                <div class="mt-inner">
+                    <div class="mt-head">
+                        <div>
+                            <h2 class="landing-title">Maintenance Mode</h2>
+                            <p class="landing-sub mt-hostline" id="mtHostLine">Loading host information…</p>
+                        </div>
+                        <button class="ui basic button" onclick="exitMaintenanceMode()">
+                            <img src="img/icons/display.svg" class="dez-icon" alt=""> Back to KVM ports
+                        </button>
+                    </div>
+
+                    <!-- Live tiles -->
+                    <div class="mt-tiles">
+                        <div class="mt-tile">
+                            <div class="mt-tile-label">CPU</div>
+                            <div class="mt-tile-value" id="mtCpuValue">–</div>
+                            <div class="mt-meter" id="mtCpuMeter"><span></span></div>
+                            <div class="mt-tile-sub" id="mtCpuSub"></div>
+                        </div>
+                        <div class="mt-tile">
+                            <div class="mt-tile-label">Memory</div>
+                            <div class="mt-tile-value" id="mtRamValue">–</div>
+                            <div class="mt-meter" id="mtRamMeter"><span></span></div>
+                            <div class="mt-tile-sub" id="mtRamSub"></div>
+                        </div>
+                        <div class="mt-tile">
+                            <div class="mt-tile-label">Storage</div>
+                            <div class="mt-tile-value" id="mtDiskValue">–</div>
+                            <div class="mt-meter" id="mtDiskMeter"><span></span></div>
+                            <div class="mt-tile-sub" id="mtDiskSub"></div>
+                        </div>
+                        <div class="mt-tile">
+                            <div class="mt-tile-label">Network</div>
+                            <div class="mt-tile-value mt-net-value">
+                                <span title="Download"><span class="mt-arrow" aria-label="Download">↓</span> <span id="mtRxValue">–</span></span>
+                                <span title="Upload"><span class="mt-arrow" aria-label="Upload">↑</span> <span id="mtTxValue">–</span></span>
+                            </div>
+                            <div class="mt-tile-sub" id="mtNetSub"></div>
+                        </div>
+                        <div class="mt-tile">
+                            <div class="mt-tile-label">Temperature</div>
+                            <div class="mt-tile-value" id="mtTempValue">–</div>
+                            <div class="mt-tile-sub" id="mtTempSub"></div>
+                        </div>
+                        <div class="mt-tile">
+                            <div class="mt-tile-label">Uptime</div>
+                            <div class="mt-tile-value" id="mtUptimeValue">–</div>
+                            <div class="mt-tile-sub" id="mtUptimeSub"></div>
+                        </div>
+                    </div>
+
+                    <!-- Usage history -->
+                    <div class="mt-section-head">
+                        <h3>Usage history</h3>
+                        <div class="ui buttons mt-range" role="group" aria-label="History range">
+                            <button class="ui mini button active" data-range="1h" aria-pressed="true">Last hour</button>
+                            <button class="ui mini button" data-range="24h" aria-pressed="false">Last 24 hours</button>
+                        </div>
+                    </div>
+                    <div class="mt-charts">
+                        <div class="mt-card">
+                            <div class="mt-card-head">
+                                <h4>CPU and memory</h4>
+                                <button class="mt-link" data-table-for="mtChartUsage">Show table</button>
+                            </div>
+                            <div class="mt-chart" id="mtChartUsage"></div>
+                        </div>
+                        <div class="mt-card">
+                            <div class="mt-card-head">
+                                <h4>Network throughput</h4>
+                                <button class="mt-link" data-table-for="mtChartNet">Show table</button>
+                            </div>
+                            <div class="mt-chart" id="mtChartNet"></div>
+                        </div>
+                    </div>
+
+                    <!-- Processes -->
+                    <div class="mt-section-head">
+                        <h3>Processes <small id="mtProcCount"></small></h3>
+                        <div class="mt-proc-tools">
+                            <input type="text" id="mtProcFilter" placeholder="Filter by name, user or PID" aria-label="Filter processes">
+                            <div class="ui toggle checkbox">
+                                <input type="checkbox" id="mtShowKernel">
+                                <label for="mtShowKernel">Kernel threads</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-card mt-proc-card">
+                        <div class="mt-proc-scroll">
+                            <table class="mt-proc-table">
+                                <thead>
+                                    <tr>
+                                        <th data-sort="pid" class="num">PID</th>
+                                        <th data-sort="name">Name</th>
+                                        <th data-sort="user">User</th>
+                                        <th data-sort="cpu" class="num" title="Share of the whole CPU (all cores = 100%)">CPU</th>
+                                        <th data-sort="mem" class="num">Memory</th>
+                                        <th data-sort="threads" class="num">Threads</th>
+                                        <th data-sort="started" class="num">Running for</th>
+                                        <th data-sort="cmd">Command</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mtProcBody">
+                                    <tr><td colspan="8" class="mt-empty">Loading processes…</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Power -->
+                    <div class="mt-section-head"><h3>Host power</h3></div>
+                    <div class="mt-card mt-power-card">
+                        <p>Restarting or shutting down the host ends every KVM session and switches off the
+                        USB and HDMI capture. After a shutdown the host has to be powered on again by hand.
+                        Both actions ask for the admin password.</p>
+                        <div class="mt-power-actions">
+                            <button class="ui orange button" onclick="openHostPowerDialog('reboot')">
+                                <img src="img/icons/reset.svg" class="dez-icon mt-icon-light" alt=""> Restart host
+                            </button>
+                            <button class="ui red button" onclick="openHostPowerDialog('shutdown')">
+                                <img src="img/icons/power.svg" class="dez-icon mt-icon-light" alt=""> Shut down host
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -134,6 +267,32 @@
             </div>
         </aside>
 
+        <!-- Maintenance mode: confirm a host restart / shutdown -->
+        <div id="mtPowerModal" class="ui tiny modal" role="dialog" aria-labelledby="mtPowerTitle">
+            <div class="header" id="mtPowerTitle">Restart host</div>
+            <div class="content">
+                <p id="mtPowerText"></p>
+                <label for="mtPowerPassword" class="mt-field-label">Admin password</label>
+                <input type="password" id="mtPowerPassword" class="mt-password" autocomplete="current-password">
+                <div id="mtPowerError" class="mt-error" role="alert"></div>
+            </div>
+            <div class="actions">
+                <button class="ui basic button cancel">Cancel</button>
+                <button class="ui red button" id="mtPowerConfirm">Restart</button>
+            </div>
+        </div>
+
+        <!-- Maintenance mode: shown while the host restarts / shuts down -->
+        <div id="mtPowerOverlay" style="display:none;" role="alertdialog" aria-live="polite" aria-labelledby="mtOverlayTitle">
+            <div class="mt-overlay-box">
+                <span class="ui loader" id="mtOverlaySpinner"></span>
+                <h2 id="mtOverlayTitle">Restarting…</h2>
+                <p id="mtOverlayText"></p>
+                <button class="ui button" id="mtOverlayClose" style="display:none;" onclick="closeHostPowerOverlay()">Close</button>
+            </div>
+        </div>
+
         <script src="js/main.js"></script>
+        <script src="js/maintenance.js"></script>
     </body>
 </html>

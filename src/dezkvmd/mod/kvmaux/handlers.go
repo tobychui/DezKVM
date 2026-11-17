@@ -5,42 +5,6 @@ import (
 	"net/http"
 )
 
-// Handler for pressing the power button
-func (c *AuxMcu) HandlePressPowerButton(w http.ResponseWriter, r *http.Request) {
-	if err := c.PressPowerButton(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-// Handler for releasing the power button
-func (c *AuxMcu) HandleReleasePowerButton(w http.ResponseWriter, r *http.Request) {
-	if err := c.ReleasePowerButton(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-// Handler for pressing the reset button
-func (c *AuxMcu) HandlePressResetButton(w http.ResponseWriter, r *http.Request) {
-	if err := c.PressResetButton(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-// Handler for releasing the reset button
-func (c *AuxMcu) HandleReleaseResetButton(w http.ResponseWriter, r *http.Request) {
-	if err := c.ReleaseResetButton(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
 // Handler for getting the UUID
 func (c *AuxMcu) HandleGetUUID(w http.ResponseWriter, r *http.Request) {
 	uuid, err := c.GetUUID()

@@ -3,6 +3,7 @@ package usbcapture
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"github.com/vladimirvivien/go4vl/device"
 	"github.com/vladimirvivien/go4vl/v4l2"
@@ -49,20 +50,27 @@ type Instance struct {
 	/* Video capture device */
 	camera             *device.Device
 	cameraStartContext context.CancelFunc
-	frames_buff        <-chan []byte
+	frames_buff        <-chan []byte // stable for the life of the Instance, survives camera restarts
 	pixfmt             v4l2.FourCCType
 	width              int
 	height             int
 	fps                int
 	streamInfo         string
 
-	/* audio capture device */
-	isAudioStreaming bool      // Whether audio is currently being captured
-	audiostopchan    chan bool // Channel to stop audio capture
+	/* audio capture device: one consumer at a time (websocket or WebRTC) */
+	audioMu             sync.Mutex
+	activeAudioConsumer *audioConsumer
+	audioStreaming      atomic.Bool // arecord is running
+
+	/* Capture supervision: restarts the camera if the capture device is lost (USB glitch) */
+	capMu       sync.Mutex        // serialises start / stop / recovery of the camera
+	wantCapture bool              // capture should be running (set by Start, cleared by Stop/Close)
+	lastRes     CaptureResolution // resolution to restore after the device comes back
+	frameCh     chan []byte       // frames handed to consumers (frames_buff reads from this)
 
 	/* Concurrent access */
-	streamMu             sync.Mutex
-	activeVideoConsumer  *videoConsumer
+	streamMu            sync.Mutex
+	activeVideoConsumer *videoConsumer
 }
 
 type videoConsumer struct {

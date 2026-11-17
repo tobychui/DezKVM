@@ -14,6 +14,7 @@ package serial
 */
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -21,6 +22,12 @@ import (
 
 	"golang.org/x/sys/unix"
 )
+
+// ErrTimeout is returned by Read when no data arrives within the read timeout.
+var ErrTimeout = errors.New("serial read timeout")
+
+// ErrPortBusy is returned by OpenPort when another process already holds the port.
+var ErrPortBusy = errors.New("serial port is in use by another process")
 
 // Port represents an open serial port on Linux.
 type Port struct {
@@ -68,6 +75,21 @@ func OpenPort(cfg *Config) (*Port, error) {
 	}
 
 	fd := int(f.Fd())
+
+	// Take an exclusive advisory lock so two processes (e.g. a stale dezkvmd
+	// that is stuck in close and a newly started one) can never read the same
+	// port at the same time and steal each other's replies
+	if err := unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB); err != nil {
+		f.Close()
+		if errors.Is(err, unix.EWOULDBLOCK) {
+			return nil, fmt.Errorf("%s: %w", cfg.Name, ErrPortBusy)
+		}
+		return nil, fmt.Errorf("failed to lock %s: %w", cfg.Name, err)
+	}
+
+	// Also mark the tty as exclusive so non-root openers get EBUSY.
+	// Note that root (CAP_SYS_ADMIN) bypasses this, hence the flock above.
+	_ = unix.IoctlSetInt(fd, unix.TIOCEXCL, 0)
 
 	// Clear O_NONBLOCK now that open succeeded — we want reads to
 	// respect VTIME/VMIN or use SetDeadline via the poller
@@ -134,10 +156,11 @@ func OpenPort(cfg *Config) (*Port, error) {
 // Read reads up to len(b) bytes from the serial port.
 func (p *Port) Read(b []byte) (int, error) {
 	n, err := p.file.Read(b)
-	// On Linux, VTIME expiry with no data returns n=0, err=nil.
-	// Convert to a timeout error so io.ReadFull works correctly.
-	if n == 0 && err == nil {
-		return 0, fmt.Errorf("serial read timeout")
+	// On Linux, VTIME expiry with no data makes read() return 0, which
+	// os.File reports as io.EOF. Convert it to a timeout error so callers
+	// (and io.ReadFull) do not mistake a quiet line for a closed device.
+	if n == 0 && (err == nil || err == io.EOF) {
+		return 0, ErrTimeout
 	}
 	return n, err
 }

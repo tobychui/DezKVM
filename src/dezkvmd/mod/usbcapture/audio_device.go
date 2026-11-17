@@ -1,7 +1,9 @@
 package usbcapture
 
 import (
-	"bufio"
+	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,6 +11,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -114,13 +117,163 @@ func GetDefaultAudioDevice() string {
 	return devs[0]
 }
 
-// AudioStreamingHandler handles incoming WebSocket connections for audio streaming.
-func (i *Instance) AudioStreamingHandler(w http.ResponseWriter, r *http.Request, devicePath string) {
-	// Check if the request contains ?quality=low
+// AudioFormat returns the PCM format delivered by StreamAudioTo: signed
+// 16-bit little-endian, interleaved, at this sample rate and channel count.
+func (i *Instance) AudioFormat() (sampleRate int, channels int) {
+	cfg := i.Config.AudioConfig
+	if cfg == nil {
+		cfg = GetDefaultAudioConfig()
+	}
+	return cfg.SampleRate, cfg.Channels
+}
+
+// resolveAudioDevice returns the ALSA PCM device file and its hw:X,Y name.
+func (i *Instance) resolveAudioDevice() (pcmdev string, hwdev string, err error) {
+	pcmdev = i.Config.AudioDeviceName
+	if pcmdev == "" {
+		// Try finding the HDMI capture card automatically
+		pcmdev, err = FindHDMICapturePCMPath()
+		if err != nil {
+			return "", "", fmt.Errorf("failed to find HDMI capture PCM path: %w", err)
+		}
+	}
+	hwdev, err = pcmDeviceToHW(pcmdev)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to convert PCM device %s to hardware device: %w", pcmdev, err)
+	}
+	return pcmdev, hwdev, nil
+}
+
+// StreamAudioTo captures PCM audio from the capture card (see AudioFormat)
+// and delivers it to fn, in whole sample frames, until ctx is cancelled, fn
+// returns an error or another client takes over the audio. fn must not keep
+// the slice after it returns.
+//
+// The ALSA capture device can only be opened once, so like the video stream
+// there is a single audio consumer: starting a new one (audio websocket or
+// a WebRTC session carrying audio) stops the previous one.
+func (i *Instance) StreamAudioTo(ctx context.Context, fn func(pcm []byte) error) error {
+	if ctx.Err() != nil {
+		return nil // already cancelled: do not take the audio from anyone
+	}
+	consumer, tookOver := i.beginAudioConsumer()
+	defer i.endAudioConsumer(consumer)
+	if tookOver {
+		log.Println("Another client is already receiving audio, taking over the audio stream...")
+	}
+
+	pcmdev, hwdev, err := i.resolveAudioDevice()
+	if err != nil {
+		return err
+	}
+
+	// The previous consumer's arecord was killed and reaped above, but the
+	// device may still be held for a moment (or by another program).
+	for retry := 0; alsa_device_occupied(pcmdev) && retry < 10; retry++ {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-consumer.takeover:
+			return ErrAudioTakenOver
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+
+	sampleRate, channels := i.AudioFormat()
+	bytesPerSample := 2 // S16_LE
+	log.Printf("Starting audio capture on %s (%s), %d Hz, %d channel(s)\n", pcmdev, hwdev, sampleRate, channels)
+
+	cmd := exec.Command("arecord",
+		"-q",
+		"-t", "raw", // headerless PCM (the default WAV header would be played as noise)
+		"-f", "S16_LE", // Format: 16-bit little-endian
+		"-r", fmt.Sprint(sampleRate),
+		"-c", fmt.Sprint(channels),
+		"-D", hwdev, // Use the hardware device
+	)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to get arecord stdout pipe: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start arecord: %w", err)
+	}
+
+	// Kill arecord as soon as the consumer is told to stop, which also
+	// unblocks the read below.
+	readDone := make(chan struct{})
+	stopReason := make(chan error, 1)
+	go func() {
+		select {
+		case <-ctx.Done():
+			stopReason <- nil
+		case <-consumer.takeover:
+			stopReason <- ErrAudioTakenOver
+		case <-readDone:
+			return
+		}
+		cmd.Process.Kill()
+	}()
+
+	i.audioStreaming.Store(true)
+	defer i.audioStreaming.Store(false)
+
+	frameBytes := channels * bytesPerSample
+	// Up to 2 x FrameSize samples per read (80 ms at the default 48 kHz)
+	frameSize := 0
+	if i.Config.AudioConfig != nil {
+		frameSize = i.Config.AudioConfig.FrameSize
+	}
+	if frameSize < 480 {
+		frameSize = 1920
+	}
+	buf := make([]byte, frameSize*frameBytes*2)
+	pending := 0 // bytes of an incomplete sample frame carried to the next read
+
+	var result error
+	for {
+		n, readErr := stdout.Read(buf[pending:])
+		total := pending + n
+		aligned := total - total%frameBytes
+		if aligned > 0 {
+			if err := fn(buf[:aligned]); err != nil {
+				result = err
+				break
+			}
+		}
+		pending = copy(buf, buf[aligned:total])
+
+		if readErr != nil {
+			select {
+			case reason := <-stopReason:
+				result = reason // stopped on purpose
+			default:
+				msg := strings.TrimSpace(stderr.String())
+				if msg == "" {
+					msg = readErr.Error()
+				}
+				result = fmt.Errorf("audio capture ended: %s", msg)
+			}
+			break
+		}
+	}
+
+	close(readDone)
+	cmd.Process.Kill()
+	cmd.Wait() // reap arecord so the ALSA device is released
+	log.Println("Audio capture stopped")
+	return result
+}
+
+// AudioStreamingHandler streams raw PCM audio over a WebSocket. The
+// ?quality= parameter selects the sample rate sent to the browser: low
+// (16 kHz), standard (24 kHz, default) or high (48 kHz).
+func (i *Instance) AudioStreamingHandler(w http.ResponseWriter, r *http.Request) {
 	quality := r.URL.Query().Get("quality")
-	qualityKey := []string{"low", "standard", "high"}
 	selectedQuality := "standard"
-	for _, q := range qualityKey {
+	for _, q := range []string{"low", "standard", "high"} {
 		if quality == q {
 			selectedQuality = q
 			break
@@ -134,164 +287,100 @@ func (i *Instance) AudioStreamingHandler(w http.ResponseWriter, r *http.Request,
 	}
 	defer conn.Close()
 
-	if alsa_device_occupied(i.Config.AudioDeviceName) {
-		//Another instance already running
-		log.Println("Audio pipe already running, stopping previous instance")
-		i.audiostopchan <- true
-		retryCounter := 0
-		for alsa_device_occupied(i.Config.AudioDeviceName) {
-			time.Sleep(500 * time.Millisecond) //Wait a bit for the previous instance to stop
-			retryCounter++
-			if retryCounter > 5 {
-				log.Println("Failed to stop previous audio instance")
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	// The client sends "exit" when it stops listening; a read error means
+	// it went away. Either way stop capturing.
+	go func() {
+		defer cancel()
+		for {
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
 				return
 			}
-		}
-	}
-
-	pcmdev := devicePath
-	if pcmdev == "" {
-		//Try finding the HDMI capture card automatically
-		pcmdev, err = FindHDMICapturePCMPath()
-		if err != nil {
-			log.Println("Failed to find HDMI capture PCM path:", err)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	log.Println("Found HDMI capture PCM path:", pcmdev)
-
-	// Convert PCM device to hardware device name
-	hwdev, err := pcmDeviceToHW(pcmdev)
-	if err != nil {
-		log.Println("Failed to convert PCM device to hardware device:", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	log.Println("Using hardware device:", hwdev)
-
-	// Create a buffered reader to read audio data
-	log.Println("Starting audio pipe with arecord...")
-
-	// Start arecord with 48kHz, 16-bit, stereo
-	cmd := exec.Command("arecord",
-		"-f", "S16_LE", // Format: 16-bit little-endian
-		"-r", fmt.Sprint(i.Config.AudioConfig.SampleRate),
-		"-c", fmt.Sprint(i.Config.AudioConfig.Channels),
-		"-D", hwdev, // Use the hardware device
-	)
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		log.Println("Failed to get arecord stdout pipe:", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	if err := cmd.Start(); err != nil {
-		log.Println("Failed to start arecord:", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	reader := bufio.NewReader(stdout)
-	bufferSize := i.Config.AudioConfig.FrameSize * i.Config.AudioConfig.Channels * i.Config.AudioConfig.BytesPerSample
-	log.Printf("Buffer size: %d bytes (FrameSize: %d, Channels: %d, BytesPerSample: %d)",
-		bufferSize, i.Config.AudioConfig.FrameSize, i.Config.AudioConfig.Channels, i.Config.AudioConfig.BytesPerSample)
-	buf := make([]byte, bufferSize*2)
-
-	// Start a goroutine to handle WebSocket messages
-	log.Println("Listening for WebSocket messages...")
-	go func() {
-		_, msg, err := conn.ReadMessage()
-		if err == nil {
 			if string(msg) == "exit" {
-				log.Println("Received exit command from client")
-				i.audiostopchan <- true // Signal to stop the audio pipe
+				log.Println("Received exit command from audio client")
 				return
 			}
 		}
 	}()
 
-	log.Println("Starting audio capture loop...")
-	i.isAudioStreaming = true
-	for {
-		select {
-		case <-i.audiostopchan:
-			log.Println("Audio pipe stopped")
-			goto DONE
-		default:
-			n, err := reader.Read(buf)
-			if err != nil {
-				log.Println("Read error:", err)
-				if i.audiostopchan != nil {
-					i.audiostopchan <- true // Signal to stop the audio pipe
-				}
-				goto DONE
-			}
-
-			if n == 0 {
-				continue
-			}
-
-			downsampled := buf[:n] // Default to original buffer if no downsampling
-			switch selectedQuality {
-			case "high":
-				// Keep original 48kHz stereo
-
-			case "standard":
-				// Downsample to 24kHz stereo
-				downsampled = downsample48kTo24kStereo(buf[:n]) // Downsample to 24kHz stereo
-				copy(buf, downsampled)                          // Copy downsampled data back into buf
-				n = len(downsampled)                            // Update n to the new length
-			case "low":
-				downsampled = downsample48kTo16kStereo(buf[:n]) // Downsample to 16kHz stereo
-				copy(buf, downsampled)                          // Copy downsampled data back into buf
-				n = len(downsampled)                            // Update n to the new length
-			}
-
-			//Send only the bytes read to WebSocket
-			err = conn.WriteMessage(websocket.BinaryMessage, downsampled[:n])
-			if err != nil {
-				log.Println("WebSocket send error:", err)
-				goto DONE
-			}
+	err = i.StreamAudioTo(ctx, func(pcm []byte) error {
+		switch selectedQuality {
+		case "standard":
+			pcm = downsample48kTo24kStereo(pcm) // Downsample to 24kHz stereo
+		case "low":
+			pcm = downsample48kTo16kStereo(pcm) // Downsample to 16kHz stereo
 		}
+		return conn.WriteMessage(websocket.BinaryMessage, pcm)
+	})
+	if err != nil {
+		log.Println("Audio websocket stream ended:", err)
 	}
-
-DONE:
-	i.isAudioStreaming = false
-	cmd.Process.Kill()
-	log.Println("Audio pipe finished")
 }
 
-// StopAudioStreaming stops the audio streaming by sending a stop signal to the audio capture loop
+// StopAudioStreaming stops the active audio consumer (websocket or WebRTC)
+// and waits for the capture to be released.
 func (i *Instance) StopAudioStreaming() {
-	if !i.isAudioStreaming {
-		return // Already stopped or not started
+	i.audioMu.Lock()
+	consumer := i.activeAudioConsumer
+	i.audioMu.Unlock()
+	if consumer == nil {
+		return // not streaming
 	}
 
-	// Send stop signal to the audio capture loop
+	consumer.stop()
 	select {
-	case i.audiostopchan <- true:
-		log.Println("Sent stop signal to audio streaming")
-	default:
-		// Channel might be full or already stopped
-		log.Println("Audio streaming already stopping or stopped")
-	}
-
-	// Wait for audio streaming to actually stop
-	maxWait := 10
-	for i.isAudioStreaming && maxWait > 0 {
-		time.Sleep(100 * time.Millisecond)
-		maxWait--
-	}
-
-	if i.isAudioStreaming {
+	case <-consumer.done:
+	case <-time.After(3 * time.Second):
 		log.Println("Warning: Audio streaming did not stop in time")
 	}
+}
+
+// ErrAudioTakenOver is returned by StreamAudioTo when another client takes
+// over the audio stream (or StopAudioStreaming is called).
+var ErrAudioTakenOver = errors.New("audio stream taken over by another client")
+
+type audioConsumer struct {
+	takeover chan struct{}
+	stopOnce sync.Once
+	done     chan struct{}
+}
+
+func (c *audioConsumer) stop() {
+	c.stopOnce.Do(func() { close(c.takeover) })
+}
+
+func (i *Instance) beginAudioConsumer() (*audioConsumer, bool) {
+	consumer := &audioConsumer{
+		takeover: make(chan struct{}),
+		done:     make(chan struct{}),
+	}
+
+	i.audioMu.Lock()
+	previous := i.activeAudioConsumer
+	i.activeAudioConsumer = consumer
+	i.audioMu.Unlock()
+
+	if previous != nil {
+		previous.stop()
+		select {
+		case <-previous.done:
+		case <-time.After(3 * time.Second):
+			log.Println("Previous audio consumer did not exit before timeout, continuing takeover...")
+		}
+	}
+	return consumer, previous != nil
+}
+
+func (i *Instance) endAudioConsumer(consumer *audioConsumer) {
+	i.audioMu.Lock()
+	if i.activeAudioConsumer == consumer {
+		i.activeAudioConsumer = nil
+	}
+	i.audioMu.Unlock()
+	close(consumer.done)
 }
 
 // Downsample48kTo24kStereo downsamples a 48kHz stereo audio buffer to 24kHz.

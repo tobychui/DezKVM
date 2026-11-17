@@ -11,9 +11,10 @@ let currentResolutionAPIURL = "/api/v1/resolution/{uuid}";
 let changeResolutionAPIURL = "/api/v1/resolution/change";
 
 // Audio quality setting (low, standard, high)
-// Check if localStorage has audio quality, set default to 'standard' if not
+// Check if localStorage has audio quality, set default to 'standard' if not.
+// (Assigning currentAudioQuality before its "let" threw on a browser's first
+// visit and stopped the rest of this file from loading, which broke the mouse.)
 if (!localStorage.getItem('audioQuality')) {
-    currentAudioQuality = 'standard';
     localStorage.setItem('audioQuality', 'standard');
 }
 let currentAudioQuality = localStorage.getItem('audioQuality');
@@ -111,6 +112,12 @@ window.addEventListener('message', function(evt){
     }
 });
 
+/* The server's error message; over HTTPS (HTTP/2) the status text is empty */
+function massStorageErrorText(xhr, error) {
+    const text = (xhr && xhr.responseText ? xhr.responseText : '').trim();
+    return text || error || ('HTTP ' + (xhr ? xhr.status : '?'));
+}
+
 function switchMassStorageToRemote(callback=undefined){
     $.cjax({
         url: massStorageSwitchURL,
@@ -130,16 +137,108 @@ function switchMassStorageToRemote(callback=undefined){
 
         },
         error: function(xhr, status, error) {
-            alert('Error switching Mass Storage to Remote: ' + error);
+            const msg = massStorageErrorText(xhr, error);
+            alert('Error switching Mass Storage to Remote: ' + msg);
             notifyStorageSideChanged();
             if (callback) {
-                callback({ error: error });
+                callback({ error: msg });
             }
         }
     });
 }
 
+/*
+    Switching the drive from the remote computer to the KVM pulls it away from
+    the remote OS. If it is still mounted there, writes that have not been
+    flushed are lost and the filesystem can be corrupted, so ask the user to
+    eject it first. "Don't show this again" is remembered per browser.
+*/
+const SKIP_KVM_SWITCH_WARNING_KEY = 'skipUsbKvmSwitchWarning';
+
+function shouldWarnBeforeKvmSwitch() {
+    try {
+        return localStorage.getItem(SKIP_KVM_SWITCH_WARNING_KEY) !== 'true';
+    } catch (e) {
+        return true; // storage blocked: always warn
+    }
+}
+
+function getKvmSwitchWarningModal() {
+    let modal = document.getElementById('usbKvmSwitchWarningModal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.id = 'usbKvmSwitchWarningModal';
+    modal.className = 'ui tiny modal';
+    modal.setAttribute('role', 'alertdialog');
+    modal.setAttribute('aria-labelledby', 'usbKvmSwitchWarningTitle');
+    modal.innerHTML =
+        '<div class="header" id="usbKvmSwitchWarningTitle">' +
+        '  <i class="eject icon"></i> Eject the drive on the remote computer first' +
+        '</div>' +
+        '<div class="content">' +
+        '  <p style="margin:0 0 0.8em;line-height:1.5;">Before switching the USB drive to the KVM side, ' +
+        '  safely eject it on the remote computer: <b>Eject</b> in Finder on macOS, ' +
+        '  <b>Safely Remove Hardware</b> on Windows, or <code>umount</code> on Linux.</p>' +
+        '  <p style="margin:0 0 1em;line-height:1.5;color:var(--dez-text-sub);">Switching while the drive is still ' +
+        '  in use there can lose files that are still being written and corrupt the drive.</p>' +
+        '  <label style="display:flex;align-items:center;gap:0.5em;cursor:pointer;user-select:none;">' +
+        '    <input type="checkbox" id="usbKvmSwitchWarningSkip" style="width:16px;height:16px;margin:0;">' +
+        '    <span>Don\'t show this again</span>' +
+        '  </label>' +
+        '</div>' +
+        '<div class="actions">' +
+        '  <button class="ui small basic cancel button">Cancel</button>' +
+        '  <button class="ui small primary approve button">Confirm Switch</button>' +
+        '</div>';
+    document.body.appendChild(modal);
+    return modal;
+}
+
+/* Show the eject reminder; calls onConfirm or onCancel exactly once. */
+function confirmKvmSwitch(onConfirm, onCancel) {
+    const modal = getKvmSwitchWarningModal();
+    const skipBox = document.getElementById('usbKvmSwitchWarningSkip');
+    if (skipBox) skipBox.checked = false;
+
+    // Keep key presses (Enter, Space, Escape) in the dialog, not the remote
+    const keysWerePaused = (typeof pauseAllKeyEvents !== 'undefined') && pauseAllKeyEvents;
+    if (typeof pauseAllKeyEvents !== 'undefined') pauseAllKeyEvents = true;
+
+    let confirmed = false;
+    $(modal).modal({
+        closable: true,
+        onApprove: function () {
+            confirmed = true;
+            if (skipBox && skipBox.checked) {
+                try { localStorage.setItem(SKIP_KVM_SWITCH_WARNING_KEY, 'true'); } catch (e) { /* not persisted */ }
+            }
+        },
+        // Runs for every way of closing: Confirm, Cancel or clicking outside
+        onHidden: function () {
+            if (typeof pauseAllKeyEvents !== 'undefined') pauseAllKeyEvents = keysWerePaused;
+            if (confirmed) onConfirm();
+            else onCancel();
+        }
+    }).modal('show');
+    const confirmBtn = modal.querySelector('.approve');
+    if (confirmBtn) confirmBtn.focus();
+}
+
 function switchMassStorageToKvm(callback=undefined){
+    if (!shouldWarnBeforeKvmSwitch()) {
+        doSwitchMassStorageToKvm(callback);
+        return;
+    }
+    confirmKvmSwitch(function () {
+        doSwitchMassStorageToKvm(callback);
+    }, function () {
+        // Cancelled: let the callers reset their "Switching…" state
+        notifyStorageSideChanged();
+        if (callback) callback({ cancelled: true });
+    });
+}
+
+function doSwitchMassStorageToKvm(callback=undefined){
     $.cjax({
         url: massStorageSwitchURL,
         type: 'POST',
@@ -158,10 +257,11 @@ function switchMassStorageToKvm(callback=undefined){
 
         },
         error: function(xhr, status, error) {
-            alert('Error switching Mass Storage to KVM: ' + error);
+            const msg = massStorageErrorText(xhr, error);
+            alert('Error switching Mass Storage to KVM: ' + msg);
             notifyStorageSideChanged();
             if (callback) {
-                callback({ error: error });
+                callback({ error: msg });
             }
 
         }
@@ -248,34 +348,19 @@ function changeAudioQuality(quality) {
     // Save the quality preference
     currentAudioQuality = quality;
     localStorage.setItem('audioQuality', quality);
-    
-    // Handle disabled audio
+
+    // Restart the audio (in WebRTC mode: the stream, which carries it)
+    const restartingStream = restartRemoteAudio();
     if (quality === 'disabled') {
-        if (audioFrontendStarted && audioSocket) {
-            console.log('Disabling audio...');
-            stopAudioWebSocket();
-            audioFrontendStarted = false;
-        }
         console.log('Audio disabled');
         return;
     }
-    
-    // Restart audio WebSocket with new quality if it's currently running
-    if (audioFrontendStarted && audioSocket) {
-        console.log('Restarting audio with new quality...');
-        stopAudioWebSocket();
-        audioFrontendStarted = false;
-    }
-
-    // Wait a moment for cleanup, then restart with new quality
-    setTimeout(function() {
-        startAudioWebSocket(currentAudioQuality);
-        audioFrontendStarted = true;
-        console.log('Audio restarted with quality:', currentAudioQuality);
-        $.toast({
-            message: "<b>Audio Quality Updated</b><br>Click on the video area if you do not hear audio shortly.",
-        });
-    }, 500);
+    console.log('Audio restarted with quality:', currentAudioQuality);
+    $.toast({
+        message: restartingStream
+            ? "<b>Audio Quality Updated</b><br>Restarting the WebRTC stream with the new audio setting…"
+            : "<b>Audio Quality Updated</b><br>Click on the video area if you do not hear audio shortly.",
+    });
 }
 
 /* 
@@ -435,10 +520,8 @@ function reconnectStreams() {
     console.log('Reconnecting streams...');
     
     // Stop audio and HID websockets
-    if (audioFrontendStarted) {
-        stopAudioWebSocket();
-        audioFrontendStarted = false;
-    }
+    if (audioSocket) stopAudioWebSocket();
+    audioFrontendStarted = false;
     disconnectRemote();
 
     // Wait a moment for cleanup, then restart
@@ -453,10 +536,10 @@ function reconnectStreams() {
         // is fully restarted by setStreamingSource above)
         var capEl = document.getElementById(streamingContainerId);
         if (capEl && capEl.tagName === 'IMG') {
-            capEl.src = capEl.src + "?t=" + Date.now();
+            capEl.src = mjpegStreamURL(kvmDeviceUUID);
         }
         
-        // Audio will be restarted when user clicks on the video (with current quality setting)
+        // Audio follows the stream (setStreamingSource picks the transport)
         console.log('Streams reconnected');
     }, 100);
 }
@@ -525,13 +608,13 @@ function autoResumeSession(width, height, fps) {
         // MJPEG only: cache-bust the img src to force reload
         var capEl2 = document.getElementById('remoteCapture');
         if (capEl2 && capEl2.tagName === 'IMG') {
-            capEl2.src = capEl2.src + "?t=" + Date.now();
+            capEl2.src = mjpegStreamURL(kvmDeviceUUID);
         }
         
-        // Restart audio WebSocket with current quality (if not disabled)
-        if (!audioFrontendStarted && currentAudioQuality !== 'disabled') {
-            startAudioWebSocket(currentAudioQuality);
-            audioFrontendStarted = true;
+        // Restart audio with current quality (if not disabled), over
+        // WebRTC or the websocket once the stream mode is known
+        if (currentAudioQuality !== 'disabled') {
+            startRemoteAudio(currentAudioQuality);
         }
         
         // Re-enable dropdown and hide loading
@@ -552,10 +635,8 @@ function prepareStreamsReconnection() {
     console.log('Preparing streams for reconnection...');
     
     // Stop audio and HID websockets
-    if (audioFrontendStarted) {
-        stopAudioWebSocket();
-        audioFrontendStarted = false;
-    }
+    if (audioSocket) stopAudioWebSocket();
+    audioFrontendStarted = false;
     disconnectRemote();
     
     // Detach event listeners before reconnection

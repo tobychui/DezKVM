@@ -3,7 +3,9 @@
 
     Keyboard, Video, Mouse (KVM) over WebSocket client-side event handling.
     Handles mouse and keyboard events, sending them to the server via WebSocket.
-    Also manages audio streaming from the server.
+    Also manages audio streaming from the server: over the WebRTC peer
+    connection when the WebRTC stream carries it, otherwise as raw PCM over
+    the audio websocket (see startRemoteAudio).
 */
 const enableKvmEventDebugPrintout = false; //Set to true to enable debug printout
 const cursorCaptureElementId = "remoteCapture";
@@ -20,6 +22,19 @@ const HIDEvent = Object.freeze({
     RESET:            0xFF,
 });
 
+/* Random ID for this page load. Sent with the video stream request and the
+   HID websocket so the backend knows which page owns the session: starting
+   a stream from another page disconnects this one (see handleSessionTakenOver). */
+var dezClientId = (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+let sessionTakenOver = false;
+
+/* URL of the MJPEG stream for this page (cache-busted) */
+function mjpegStreamURL(deviceUUID) {
+    return '/api/v1/stream/' + deviceUUID + '/video?client=' + encodeURIComponent(dezClientId) + '&t=' + Date.now();
+}
+
 let hidsocket;
 let hidWebSocketReady = false;
 let protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -31,6 +46,9 @@ let mouseMoveAbsolute = true; // Set to true for absolute mouse coordinates, fal
 let relativeMouseSensitivity = 5; // Sensitivity multiplier for relative mouse mode (1-10)
 let mouseIsOutside = false; //Mouse is outside capture element
 let audioFrontendStarted = false; //Audio frontend has been started
+// Declared up here: setStreamingSource() runs during this script's load
+let remoteAudioWanted = false; // audio was started for this page (see startRemoteAudio)
+let _streamModeKnown = false;  // the stream mode (and so the audio transport) is decided
 let kvmDeviceUUID = ""; //UUID of the device being controlled
 let swapCtrlCmd = false; // Swap CTRL and CMD (Meta) keys
 let askOnPaste = true; // Prompt user when pasting
@@ -49,7 +67,7 @@ let _hidPendingAcks = {}; // { rid: { resolve, timer } }
 
 if (window.location.hash.length > 1){
     kvmDeviceUUID = window.location.hash.substring(1);
-    hidSocketURL = hidSocketURL.replace("{uuid}", kvmDeviceUUID);
+    hidSocketURL = hidSocketURL.replace("{uuid}", kvmDeviceUUID) + '?client=' + encodeURIComponent(dezClientId);
     audioSocketURL = audioSocketURL.replace("{uuid}", kvmDeviceUUID);
     massStorageSwitchURL = massStorageSwitchURL.replace("{uuid}", kvmDeviceUUID);
 
@@ -82,12 +100,12 @@ if (window.location.hash.length > 1){
             }
 
             // Self-start the audio stream. The parent shell also triggers
-            // startAudioWebSocket after connecting; the double start is
+            // startRemoteAudio after connecting; the double start is
             // guarded, this covers direct loads / reloads of the viewport.
-            let storedAudioQuality = localStorage.getItem('audioQuality') || 'standard';
+            let storedAudioQuality = getAudioQuality();
             if (storedAudioQuality !== 'disabled') {
                 setTimeout(function () {
-                    if (!audioSocket) startAudioWebSocket(storedAudioQuality);
+                    startRemoteAudio(storedAudioQuality);
                 }, 500);
             }
             if(typeof prefs.key_stacking_enabled !== 'undefined'){
@@ -111,6 +129,9 @@ if (window.location.hash.length > 1){
 /* Initiate the video stream: MJPEG (default) or WebRTC per the stored
    streaming_mode preference. */
 function setStreamingSource(deviceUUID) {
+    // Until the mode is known, audio starts wait: the WebRTC stream may
+    // carry the audio itself (see startRemoteAudio).
+    _streamModeKnown = false;
     $.get('/api/v1/preferences/' + deviceUUID, function(prefs){
         applyStreamingSource(deviceUUID, prefs);
     }).fail(function(){
@@ -124,18 +145,21 @@ function applyStreamingSource(deviceUUID, prefs){
         && typeof RTCPeerConnection !== 'undefined';
 
     if (useWebRTC) {
+        // Decides synchronously whether the session will carry the audio
         startWebRTCStream(deviceUUID, prefs);
-        return;
+    } else {
+        // Classic MJPEG pipeline
+        if (typeof stopWebRTCStream === 'function') {
+            stopWebRTCStream(true);
+        }
+        const el = (typeof ensureCaptureElement === 'function')
+            ? ensureCaptureElement('img')
+            : document.getElementById('remoteCapture');
+        el.src = mjpegStreamURL(deviceUUID);
     }
 
-    // Classic MJPEG pipeline
-    if (typeof stopWebRTCStream === 'function') {
-        stopWebRTCStream(true);
-    }
-    const el = (typeof ensureCaptureElement === 'function')
-        ? ensureCaptureElement('img')
-        : document.getElementById('remoteCapture');
-    el.src = `/api/v1/stream/${deviceUUID}/video?t=${Date.now()}`;
+    _streamModeKnown = true;
+    syncRemoteAudioTransport();
 }
 
 /* Get current streaming resolution, return [width, height].
@@ -267,7 +291,7 @@ function handleMousePress(event) {
     }
 
     if (!audioFrontendStarted && !!currentAudioQuality && currentAudioQuality !== 'disabled'){
-        startAudioWebSocket(currentAudioQuality);
+        startRemoteAudio(currentAudioQuality);
         audioFrontendStarted = true;
     }
 }
@@ -731,6 +755,9 @@ function detachHidEventListeners() {
 }
 
 function startHidWebSocket(){
+    if (sessionTakenOver) {
+        return; // another page owns the session; "Take back control" reloads
+    }
     if (hidsocket){
         //Already started
         console.warn("Invalid usage: HID Transport Websocket already started!");
@@ -750,10 +777,21 @@ function startHidWebSocket(){
         hidsocket.send(JSON.stringify(hidResetCommand));
     });
 
+    // Closed by the backend because another page took over the session
+    hidsocket.addEventListener('close', function(event) {
+        if (event.code === 4001) {
+            handleSessionTakenOver();
+        }
+    });
+
     hidsocket.addEventListener('message', function(event) {
         // Handle ACK replies from backend
         try {
             var msg = JSON.parse(event.data);
+            if (msg.type === 'takeover') {
+                handleSessionTakenOver(msg.reason);
+                return;
+            }
             if (msg.rid && _hidPendingAcks[msg.rid]) {
                 clearTimeout(_hidPendingAcks[msg.rid].timer);
                 _hidPendingAcks[msg.rid].resolve(msg.status);
@@ -772,6 +810,7 @@ attachHidEventListeners();
 
 function stopHidWebSocket(){
     if (!hidsocket){
+        if (sessionTakenOver) return; // already closed by the takeover
         alert("No ws connection to stop");
         return;
     }
@@ -803,49 +842,206 @@ function resetRemoteHID() {
 /* Audio Streaming Frontend */
 let audioSocket = null;
 let audioContext = null;
+let audioGainNode = null; // gain of the websocket PCM playback
 let audioQueue = [];
 let audioPlaying = false;
 let _audioHintShown = false;
 
-/* Resume a suspended AudioContext (browser autoplay policy). Called after
-   the context is created and again on every user interaction, since some
+/* Remote audio settings, stored per browser (settings overlay, Audio tab) */
+function getAudioQuality() {
+    return localStorage.getItem('audioQuality') || 'standard';
+}
+
+/* "Always transfer audio via WebSocket": keep the PCM websocket even when
+   the video runs over WebRTC */
+function audioForcedWebSocket() {
+    return localStorage.getItem('audioForceWebSocket') === 'true';
+}
+
+/* Playback gain in percent, 0-200 (100 = unchanged) */
+function getAudioGainPercent() {
+    const v = parseInt(localStorage.getItem('audioGain'), 10);
+    return isNaN(v) ? 100 : Math.min(200, Math.max(0, v));
+}
+let remoteAudioGain = getAudioGainPercent() / 100;
+
+/* Set the playback gain (percent, 0-200) of whichever audio path is
+   playing, and remember it for this browser. */
+function setRemoteAudioGain(percent) {
+    percent = Math.min(200, Math.max(0, Math.round(Number(percent) || 0)));
+    remoteAudioGain = percent / 100;
+    localStorage.setItem('audioGain', String(percent));
+    [[audioContext, audioGainNode], [_rtcAudioCtx, _rtcAudioGain]].forEach(function (pair) {
+        const ctx = pair[0], node = pair[1];
+        if (ctx && node) {
+            // short ramp, avoids clicks while dragging the slider
+            node.gain.setTargetAtTime(remoteAudioGain, ctx.currentTime, 0.02);
+        }
+    });
+    if (_rtcAudioEl && !_rtcAudioGain) {
+        _rtcAudioEl.volume = Math.min(1, remoteAudioGain); // no Web Audio: cannot boost
+    }
+}
+
+/* Audio can come over two transports:
+   - WebRTC: when the video runs over WebRTC, the session also carries the
+     audio as Opus (unless "Always transfer audio via WebSocket" is set, or
+     the server cannot encode Opus). The track is played by playWebRTCAudio.
+   - WebSocket: raw PCM over /api/v1/stream/{uuid}/audio, for MJPEG mode.
+   startRemoteAudio is the single entry point used by the shell, clicks and
+   settings; it opens the websocket only when the WebRTC session does not
+   carry the audio. The server has one audio capture, so only one transport
+   may run at a time. */
+function startRemoteAudio(quality) {
+    if (sessionTakenOver) return;
+    quality = quality || getAudioQuality();
+    if (quality === 'disabled') return;
+    remoteAudioWanted = true;
+    if (!_streamModeKnown) return; // applyStreamingSource picks the transport
+    syncRemoteAudioTransport();
+}
+
+/* Apply a changed audio setting (quality or transport). A WebRTC session
+   negotiates its audio track up front, so when the change affects it the
+   stream is restarted; otherwise only the websocket is. Returns true when
+   the stream is being restarted. */
+function restartRemoteAudio() {
+    const quality = getAudioQuality();
+    const wantWebRTCAudio = quality !== 'disabled' && !audioForcedWebSocket();
+    const webrtc = typeof webrtcStreamActive === 'function' && webrtcStreamActive();
+    if (audioSocket) stopAudioWebSocket();
+    audioFrontendStarted = false;
+    remoteAudioWanted = quality !== 'disabled';
+    if (webrtc && (webrtcCarriesAudio() || wantWebRTCAudio)) {
+        setStreamingSource(kvmDeviceUUID); // renegotiates, then syncs the websocket
+        return true;
+    }
+    if (remoteAudioWanted) {
+        // Give the server a moment to release the capture
+        setTimeout(syncRemoteAudioTransport, 500);
+    }
+    return false;
+}
+
+/* Open or close the audio websocket to match the current stream */
+function syncRemoteAudioTransport() {
+    if (!remoteAudioWanted || sessionTakenOver || !kvmDeviceUUID) return;
+    const quality = getAudioQuality();
+    if (quality === 'disabled') return;
+    if (typeof webrtcCarriesAudio === 'function' && webrtcCarriesAudio()) {
+        if (audioSocket) {
+            console.log('Audio moves to the WebRTC connection, closing the audio websocket');
+            stopAudioWebSocket();
+        }
+        resumeAudioContext(true);
+    } else if (!audioSocket) {
+        startAudioWebSocket(quality);
+    }
+}
+
+/* Is any remote audio path running (websocket or WebRTC)? */
+function remoteAudioTransport() {
+    if (_rtcAudioEl) return 'webrtc';
+    if (audioSocket) return 'websocket';
+    return '';
+}
+
+/* ---- WebRTC audio playback ----
+   The Opus track of the WebRTC session goes through Web Audio so the gain
+   can go above 100%. */
+let _rtcAudioEl = null;   // muted <audio> holding the stream (see below)
+let _rtcAudioCtx = null;
+let _rtcAudioGain = null;
+
+function playWebRTCAudio(stream) {
+    stopWebRTCAudio();
+    // Chrome only feeds a remote WebRTC stream into Web Audio while the
+    // stream is also attached to a media element, so keep a muted one.
+    _rtcAudioEl = new Audio();
+    _rtcAudioEl.muted = true;
+    _rtcAudioEl.autoplay = true;
+    _rtcAudioEl.srcObject = stream;
+    try {
+        _rtcAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+        const src = _rtcAudioCtx.createMediaStreamSource(stream);
+        _rtcAudioGain = _rtcAudioCtx.createGain();
+        _rtcAudioGain.gain.value = remoteAudioGain;
+        src.connect(_rtcAudioGain);
+        _rtcAudioGain.connect(_rtcAudioCtx.destination);
+    } catch (e) {
+        // No usable Web Audio: play through the element, gain capped at 100%
+        console.warn('Web Audio unavailable for WebRTC audio, playing without gain boost:', e);
+        if (_rtcAudioCtx) { try { _rtcAudioCtx.close(); } catch (e2) { /* ignore */ } }
+        _rtcAudioCtx = null;
+        _rtcAudioGain = null;
+        _rtcAudioEl.muted = false;
+        _rtcAudioEl.volume = Math.min(1, remoteAudioGain);
+    }
+    _rtcAudioEl.play().catch(function () { /* resumed on the next click */ });
+    audioFrontendStarted = true;
+    resumeAudioContext(true);
+    console.log('Playing remote audio from the WebRTC connection');
+}
+
+function stopWebRTCAudio() {
+    if (_rtcAudioEl) {
+        _rtcAudioEl.pause();
+        _rtcAudioEl.srcObject = null;
+        _rtcAudioEl = null;
+    }
+    if (_rtcAudioCtx) {
+        try { _rtcAudioCtx.close(); } catch (e) { /* already closed */ }
+        _rtcAudioCtx = null;
+    }
+    _rtcAudioGain = null;
+    if (!audioSocket) audioFrontendStarted = false;
+}
+
+/* Resume suspended audio playback (browser autoplay policy). Called after
+   the audio starts and again on every user interaction, since some
    browsers only allow the resume during a user gesture. */
 function resumeAudioContext(showHint) {
-    if (!audioContext || audioContext.state !== 'suspended') return;
-    audioContext.resume().then(function () {
-        console.log('AudioContext resumed');
-        _audioHintShown = false;
-    }).catch(function () {
-        if (showHint && !_audioHintShown && typeof $ !== 'undefined' && $.toast) {
-            _audioHintShown = true;
-            $.toast({
-                message: '<i class="volume up icon"></i> Click anywhere in the session to enable remote audio',
-                duration: 6000
-            });
-        }
+    if (_rtcAudioEl && _rtcAudioEl.paused) {
+        _rtcAudioEl.play().catch(function () { /* needs a gesture */ });
+    }
+    [audioContext, _rtcAudioCtx].forEach(function (ctx) {
+        if (!ctx || ctx.state !== 'suspended') return;
+        ctx.resume().then(function () {
+            console.log('AudioContext resumed');
+            _audioHintShown = false;
+        }).catch(function () {
+            if (showHint && !_audioHintShown && typeof $ !== 'undefined' && $.toast) {
+                _audioHintShown = true;
+                $.toast({
+                    message: '<i class="volume up icon"></i> Click anywhere in the session to enable remote audio',
+                    duration: 6000
+                });
+            }
+        });
     });
 }
 
 // Any interaction inside the viewport may unlock audio playback; a click is
 // also the retry path when the audio socket failed to start earlier.
 function _audioGestureKick() {
+    if (sessionTakenOver) return; // the takeover screen must not restart audio
     resumeAudioContext(false);
-    if (!audioSocket && kvmDeviceUUID) {
-        const q = localStorage.getItem('audioQuality') || 'standard';
-        if (q !== 'disabled') startAudioWebSocket(q);
-    }
+    if (kvmDeviceUUID) startRemoteAudio();
 }
 document.addEventListener('click', _audioGestureKick, true);
 document.addEventListener('keydown', function () { resumeAudioContext(false); }, true);
 
 //accept low, standard, high quality audio mode
 function startAudioWebSocket(quality="standard") {
+    if (sessionTakenOver) {
+        return; // another page owns the session (the server refuses it too)
+    }
     if (audioSocket) {
         console.warn("Audio WebSocket already started");
         return;
     }
 
-    audioSocket = new WebSocket(`${audioSocketURL}?quality=${quality}`);
+    audioSocket = new WebSocket(`${audioSocketURL}?quality=${quality}&client=${encodeURIComponent(dezClientId)}`);
     audioSocket.binaryType = 'arraybuffer';
 
     audioSocket.onopen = function() {
@@ -853,6 +1049,9 @@ function startAudioWebSocket(quality="standard") {
         audioFrontendStarted = true;
         if (!audioContext) {
             audioContext = new (window.AudioContext || window.webkitAudioContext)({sampleRate: 24000});
+            audioGainNode = audioContext.createGain();
+            audioGainNode.gain.value = remoteAudioGain;
+            audioGainNode.connect(audioContext.destination);
         }
         // Browser autoplay policies start the context suspended unless we
         // are inside a user-activation window. Try to resume immediately
@@ -872,6 +1071,14 @@ function startAudioWebSocket(quality="standard") {
     }
     let scheduledTime = 0;
     audioSocket.onmessage = function(event) {
+        if (typeof event.data === 'string') {
+            // Text frames are control messages, e.g. a takeover notice
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'takeover') handleSessionTakenOver(msg.reason);
+            } catch (e) { /* not JSON */ }
+            return;
+        }
         if (!audioContext) return;
         let pcm = new Int16Array(event.data);
         if (pcm.length === 0) {
@@ -895,8 +1102,14 @@ function startAudioWebSocket(quality="standard") {
         scheduleAudioPlayback();
     };
 
-    audioSocket.onclose = function() {
+    audioSocket.onclose = function(event) {
         console.log("Audio WebSocket closed");
+        if (event && event.code === 4001) {
+            // Refused: this page's session was taken over by another page
+            audioSocket = null;
+            handleSessionTakenOver();
+            return;
+        }
         audioSocket = null;
         audioFrontendStarted = false;
         audioPlaying = false;
@@ -933,7 +1146,7 @@ function startAudioWebSocket(quality="standard") {
             }
             let source = audioContext.createBufferSource();
             source.buffer = buffer;
-            source.connect(audioContext.destination);
+            source.connect(audioGainNode || audioContext.destination);
             source.start(scheduledTime);
             scheduledTime += buffer.duration;
         }
@@ -959,14 +1172,70 @@ function stopAudioWebSocket() {
         audioContext.close();
         audioContext = null;
     }
+    audioGainNode = null;
 }
 
 window.addEventListener('beforeunload', function() {
-    stopAudioWebSocket();
+    if (audioSocket) stopAudioWebSocket();
+    stopWebRTCAudio();
 });
+
+/*
+    Another browser page started a video stream for this device and now owns
+    the session: the backend already stopped this page's video and closed its
+    HID websocket. Stop everything locally (without telling the server, that
+    would end the new owner's WebRTC stream) and show the takeover screen.
+*/
+function handleSessionTakenOver(reason) {
+    if (sessionTakenOver) return;
+    sessionTakenOver = true;
+    console.warn('Session taken over by another client:', reason || '');
+
+    if (typeof stopWebRTCStream === 'function') {
+        stopWebRTCStream(false);
+    }
+    const capEl = document.getElementById('remoteCapture');
+    if (capEl && capEl.tagName === 'IMG') {
+        capEl.removeAttribute('src'); // stop the MJPEG request
+    }
+    try { stopAudioWebSocket(); } catch (e) { /* audio was not running */ }
+    audioFrontendStarted = false;
+    try { detachHidEventListeners(); } catch (e) { /* not attached */ }
+    if (document.pointerLockElement) {
+        document.exitPointerLock();
+    }
+    if (hidsocket) {
+        try { hidsocket.close(); } catch (e) { /* already closed */ }
+        hidsocket = null;
+    }
+    showTakenOverScreen();
+}
+
+function showTakenOverScreen() {
+    if (document.getElementById('sessionTakenOverOverlay')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'sessionTakenOverOverlay';
+    overlay.setAttribute('role', 'alertdialog');
+    overlay.setAttribute('aria-labelledby', 'sessionTakenOverTitle');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:center;' +
+        'justify-content:center;background:rgba(20,20,20,0.92);color:#eee;text-align:center;padding:16px;';
+    overlay.innerHTML =
+        '<div style="max-width:420px;">' +
+        '  <i class="huge unlinkify icon" style="color:#e05a6a;"></i>' +
+        '  <h2 id="sessionTakenOverTitle" style="margin:0.6em 0 0.4em;font-weight:600;">Session taken over</h2>' +
+        '  <p style="opacity:0.85;line-height:1.5;margin:0 0 1.4em;">This device is now being viewed and controlled from another ' +
+        '  browser window or device. Video, audio, keyboard and mouse have been disconnected from this page.</p>' +
+        '  <button class="ui primary button" id="sessionTakeBackButton">Take back control</button>' +
+        '</div>';
+    document.body.appendChild(overlay);
+    document.getElementById('sessionTakeBackButton').addEventListener('click', function() {
+        // A fresh page load gets a new client ID and takes the session back
+        window.location.reload();
+    });
+}
 
 // Disconnect both HID and Audio WebSockets
 function disconnectRemote(){
-    stopAudioWebSocket();
+    if (audioSocket) stopAudioWebSocket();
     stopHidWebSocket();
 }

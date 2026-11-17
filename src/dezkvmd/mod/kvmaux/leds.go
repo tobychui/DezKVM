@@ -20,19 +20,42 @@ const (
 	StatusLEDBlinkFast
 )
 
+// LED modes as defined in protocol v2
+const (
+	ledModeOff  byte = 0
+	ledModeOn   byte = 1
+	ledModeSlow byte = 2
+	ledModeFast byte = 3
+)
+
 func (c *AuxMcu) SetStatusLED(pattern StatusLEDPattern) error {
-	var cmd byte
+	var mode byte
 	switch pattern {
 	case StatusLEDOff:
-		cmd = '0'
+		mode = ledModeOff
 	case StatusLEDOn:
-		cmd = '1'
+		mode = ledModeOn
 	case StatusLEDBlinkSlow:
-		cmd = '2'
+		mode = ledModeSlow
 	case StatusLEDBlinkFast:
-		cmd = '3'
+		mode = ledModeFast
 	default:
 		return fmt.Errorf("invalid status LED pattern: %d", pattern)
 	}
-	return c.sendCommand(cmd)
+	_, err := c.transact(cmdSetLED, []byte{mode}, auxDefaultDeadline)
+	return err
+}
+
+// ledModeToPattern converts a protocol LED mode back to a StatusLEDPattern
+func ledModeToPattern(mode byte) StatusLEDPattern {
+	switch mode {
+	case ledModeOff:
+		return StatusLEDOff
+	case ledModeOn:
+		return StatusLEDOn
+	case ledModeFast:
+		return StatusLEDBlinkFast
+	default:
+		return StatusLEDBlinkSlow
+	}
 }

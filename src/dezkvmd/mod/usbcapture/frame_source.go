@@ -83,14 +83,10 @@ func (i *Instance) StreamFramesTo(ctx context.Context, fn func(frame []byte) err
 			if !ok {
 				return errors.New("capture stream closed")
 			}
-			// Drain one buffered frame to keep latency low when the
+			// Skip to the newest frame to keep latency low when the
 			// consumer falls behind the capture rate.
-			select {
-			case f := <-i.frames_buff:
-				frame = f
-			default:
-			}
-			if len(frame) == 0 || !isJPEG(frame) {
+			frame = latestFrame(frame, i.frames_buff, nil)
+			if !isJPEG(frame) {
 				continue
 			}
 			if err := fn(frame); err != nil {

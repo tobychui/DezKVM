@@ -52,8 +52,13 @@ type Controller struct {
 	serialRunning       bool
 	writeQueue          chan []byte
 	incomingDataQueue   chan []byte // Queue for incoming data
+	txMu                sync.Mutex  // Serializes command/reply transactions
 	lastCursorEventTime int64
 	readCloseChan       chan bool
+
+	/* Connected HID websocket clients, see KickOtherClients */
+	clientsMu sync.Mutex
+	clients   map[*hidClient]struct{}
 
 	/* Mouse Jiggler */
 	jiggler          jigglerState
@@ -63,7 +68,7 @@ type Controller struct {
 
 type HIDCommand struct {
 	Event                EventType `json:"event"`
-	Rid                  string    `json:"rid,omitempty"`                    // Reply ID — if set, backend sends an ACK after the command is processed
+	Rid                  string    `json:"rid,omitempty"` // Reply ID — if set, backend sends an ACK after the command is processed
 	Keycode              int       `json:"keycode,omitempty"`
 	IsRightModKey        bool      `json:"is_right_modifier_key,omitempty"`   // true if the key is a right modifier key (Ctrl, Shift, Alt, GUI)
 	MouseAbsX            int       `json:"mouse_x,omitempty"`                 // Absolute mouse position in X direction

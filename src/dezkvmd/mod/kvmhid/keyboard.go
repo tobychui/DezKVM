@@ -233,13 +233,7 @@ func keyboardSendKeyCombinations(c *Controller) ([]byte, error) {
 	// Calculate checksum
 	packet[13] = calcChecksum(packet[:13])
 
-	err := c.Send(packet)
-	if err != nil {
-		return nil, errors.New("failed to send mouse move command: " + err.Error())
-	}
-
-	// Wait for a reply from the device
-	return c.WaitForReply(0x02)
+	return c.transact(packet, 0x02, hidReplyTimeout)
 }
 
 // JavaScriptKeycodeToHIDOpcode converts JavaScript keycode into HID keycode

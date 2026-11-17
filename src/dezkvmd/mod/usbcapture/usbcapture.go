@@ -50,9 +50,6 @@ func NewInstance(config *Config) (*Instance, error) {
 		width:      0,
 		height:     0,
 		streamInfo: "",
-
-		//Audio
-		audiostopchan: make(chan bool, 1),
 	}, nil
 }
 
@@ -68,18 +65,15 @@ func (i *Instance) IsCapturing() bool {
 
 // IsAudioStreaming checks if the audio is currently being captured
 func (i *Instance) IsAudioStreaming() bool {
-	return i.isAudioStreaming
+	return i.audioStreaming.Load()
 }
 
 // Close closes the camera device and releases resources
 func (i *Instance) Close() error {
-	if i.camera != nil {
-		i.StopVideoCapture()
-	}
-
-	if i.isAudioStreaming {
-		i.StopAudioStreaming()
-	}
+	// Always stop, even with no camera right now: the supervisor may be waiting
+	// for a lost device to come back and must not outlive the instance.
+	i.StopVideoCapture()
+	i.StopAudioStreaming()
 	return nil
 }
 
@@ -130,9 +124,7 @@ func (i *Instance) ChangeResolution(newResolution *CaptureResolution) error {
 	}
 
 	// Stop the audio streaming if active
-	if i.isAudioStreaming {
-		i.StopAudioStreaming()
-	}
+	i.StopAudioStreaming()
 
 	// Stop the current capture
 	err = i.StopVideoCapture()

@@ -7,6 +7,11 @@
     connection is negotiated with the backend, which hardware-encodes the
     HDMI capture to H.264 (see mod/videnc).
 
+    The session also carries the remote audio (Opus) unless the audio is
+    off or "Always transfer audio via WebSocket" is set; kvmevt.js then
+    skips the PCM audio websocket (see startRemoteAudio). When the server
+    cannot send audio it says so in the answer and the websocket is used.
+
     Loaded by viewport.html before kvmevt.js; kvmevt.js decides per the
     stored preferences whether to call startWebRTCStream() or to use the
     classic MJPEG stream.
@@ -14,6 +19,19 @@
 
 let _webrtcPC = null;
 let _webrtcActive = false;
+// Audio over this WebRTC session: 'off' (websocket is used), 'pending'
+// (requested in the offer, waiting for the answer) or 'on'
+let _webrtcAudioState = 'off';
+
+/* Does the WebRTC session carry (or is about to carry) the remote audio? */
+function webrtcCarriesAudio() {
+    return _webrtcActive && _webrtcAudioState !== 'off';
+}
+
+/* Is the video currently streamed over WebRTC? */
+function webrtcStreamActive() {
+    return _webrtcActive;
+}
 
 /*
     Ensure the capture element (#remoteCapture) is the given tag ('img' or
@@ -31,7 +49,7 @@ function ensureCaptureElement(tag) {
     fresh.setAttribute('oncontextmenu', 'return false;');
     if (tag === 'video') {
         fresh.autoplay = true;
-        fresh.muted = true;       // audio runs over the separate PCM websocket
+        fresh.muted = true;       // audio is played separately (gain, see kvmevt.js)
         fresh.playsInline = true;
     }
 
@@ -73,14 +91,31 @@ async function startWebRTCStream(deviceUUID, prefs) {
     const videoEl = ensureCaptureElement('video');
     _webrtcActive = true;
 
+    // Audio rides on this session unless it is off or forced to the websocket
+    const audioQuality = (typeof getAudioQuality === 'function') ? getAudioQuality() : 'standard';
+    const wantAudio = audioQuality !== 'disabled' &&
+        !(typeof audioForcedWebSocket === 'function' && audioForcedWebSocket());
+    _webrtcAudioState = wantAudio ? 'pending' : 'off';
+    if (wantAudio && typeof audioSocket !== 'undefined' && audioSocket) {
+        stopAudioWebSocket(); // the server has a single audio capture
+    }
+
     const pc = new RTCPeerConnection({
         iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
     });
     _webrtcPC = pc;
 
     pc.addTransceiver('video', { direction: 'recvonly' });
+    if (wantAudio) {
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+    }
     pc.ontrack = function (evt) {
-        videoEl.srcObject = evt.streams[0];
+        const stream = (evt.streams && evt.streams[0]) || new MediaStream([evt.track]);
+        if (evt.track.kind === 'audio') {
+            if (typeof playWebRTCAudio === 'function') playWebRTCAudio(stream);
+            return;
+        }
+        videoEl.srcObject = stream;
         videoEl.play().catch(function () { /* autoplay is muted, should not block */ });
     };
     pc.oniceconnectionstatechange = function () {
@@ -105,7 +140,10 @@ async function startWebRTCStream(deviceUUID, prefs) {
         sdp: pc.localDescription.sdp,
         encoder: (prefs && prefs.video_encoder) || 'auto',
         variant: (prefs && prefs.video_encoder_variant) || '',
-        bitrate_kbps: (prefs && prefs.video_bitrate_kbps) || 0
+        bitrate_kbps: (prefs && prefs.video_bitrate_kbps) || 0,
+        client_id: (typeof dezClientId !== 'undefined') ? dezClientId : '',
+        audio: wantAudio,
+        audio_quality: audioQuality
     };
 
     const csrf = document.querySelector('meta[name="dezkvm.csrf.token"]');
@@ -117,6 +155,16 @@ async function startWebRTCStream(deviceUUID, prefs) {
         data: JSON.stringify(body),
         success: function (resp) {
             if (!_webrtcActive || _webrtcPC !== pc) return; // superseded meanwhile
+            if (wantAudio) {
+                if (resp.audio) {
+                    _webrtcAudioState = 'on';
+                } else {
+                    // Server cannot send audio over WebRTC: use the websocket
+                    _webrtcAudioState = 'off';
+                    console.warn('WebRTC audio unavailable, using the audio websocket:', resp.audio_error || '');
+                    if (typeof syncRemoteAudioTransport === 'function') syncRemoteAudioTransport();
+                }
+            }
             pc.setRemoteDescription({ type: 'answer', sdp: resp.sdp }).then(function () {
                 console.log('WebRTC stream established via', resp.encoder_name);
                 $.toast({
@@ -141,6 +189,8 @@ async function startWebRTCStream(deviceUUID, prefs) {
 */
 function stopWebRTCStream(notifyServer) {
     _webrtcActive = false;
+    _webrtcAudioState = 'off';
+    if (typeof stopWebRTCAudio === 'function') stopWebRTCAudio();
     if (_webrtcPC) {
         try { _webrtcPC.close(); } catch (e) { /* already closed */ }
         _webrtcPC = null;
@@ -152,7 +202,9 @@ function stopWebRTCStream(notifyServer) {
     if (notifyServer && typeof kvmDeviceUUID !== 'undefined' && kvmDeviceUUID) {
         const csrf = document.querySelector('meta[name="dezkvm.csrf.token"]');
         $.ajax({
-            url: '/api/v1/webrtc/' + kvmDeviceUUID + '/stop',
+            // Only stops the session if this page still owns it
+            url: '/api/v1/webrtc/' + kvmDeviceUUID + '/stop' +
+                ((typeof dezClientId !== 'undefined') ? '?client=' + encodeURIComponent(dezClientId) : ''),
             method: 'POST',
             headers: { 'dezkvm_csrf_token': csrf ? csrf.getAttribute('content') : '' }
         });
@@ -168,5 +220,7 @@ function webrtcFallbackToMJPEG(deviceUUID, reason) {
     });
     stopWebRTCStream(true);
     const img = ensureCaptureElement('img');
-    img.src = '/api/v1/stream/' + deviceUUID + '/video?t=' + Date.now();
+    img.src = mjpegStreamURL(deviceUUID);
+    // Audio was expected on the WebRTC session: move it to the websocket
+    if (typeof syncRemoteAudioTransport === 'function') syncRemoteAudioTransport();
 }

@@ -2,12 +2,12 @@ package dezkvm
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -24,6 +24,11 @@ func (d *DezkVM) HandleVideoStreams(w http.ResponseWriter, r *http.Request, inst
 		http.Error(w, "Instance with specified UUID not found", http.StatusNotFound)
 		return
 	}
+	// The page starting a stream takes over the session (see session_owner.go)
+	if err := targetInstance.claimVideo(clientIDFromRequest(r)); err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
 	// Serve the video stream
 	targetInstance.usbCaptureDevice.ServeVideoStream(w, r)
 }
@@ -34,14 +39,27 @@ func (d *DezkVM) HandleAudioStreams(w http.ResponseWriter, r *http.Request, inst
 		http.Error(w, "Instance with specified UUID not found", http.StatusNotFound)
 		return
 	}
-	pcmDevicePath := targetInstance.captureConfig.AudioDeviceName
-	targetInstance.usbCaptureDevice.AudioStreamingHandler(w, r, pcmDevicePath)
+	// A page that was taken over must not take the audio back
+	if targetInstance.isRevoked(clientIDFromRequest(r)) {
+		rejectTakenOverWebsocket(w, r)
+		return
+	}
+	if targetInstance.usbCaptureDevice == nil {
+		http.Error(w, "Capture device not initialized", http.StatusServiceUnavailable)
+		return
+	}
+	targetInstance.usbCaptureDevice.AudioStreamingHandler(w, r)
 }
 
 func (d *DezkVM) HandleHIDEvents(w http.ResponseWriter, r *http.Request, instanceUuid string) {
 	targetInstance, err := d.GetInstanceByUUID(instanceUuid)
 	if err != nil {
 		http.Error(w, "Instance with specified UUID not found", http.StatusNotFound)
+		return
+	}
+	// A page that was taken over must not regain keyboard and mouse
+	if targetInstance.isRevoked(clientIDFromRequest(r)) {
+		rejectTakenOverWebsocket(w, r)
 		return
 	}
 	// Set status LED to blinking pattern while connection is active
@@ -86,28 +104,25 @@ func (d *DezkVM) HandleMassStorageSideSwitch(w http.ResponseWriter, r *http.Requ
 
 	// Switch the USB mass storage side using the AuxMCU controller
 	if isKvmSide {
-		// Take a snapshot of the current storage device list
-		sdlist, _ := storage.GetStorageDeviceLists()
-		ogListLength := len(sdlist)
+		// Snapshot the disks first, to tell a different drive apart on timeout
+		disksBefore, _ := storage.ListDiskUUIDs()
 		err = targetInstance.auxMCUController.SwitchUSBToKVM()
 		if err != nil {
 			http.Error(w, "Failed to switch USB mass storage to KVM side: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		rescanCount := 0
-		// After switching to KVM side, poll for the new storage device to appear (with a timeout)
-		for {
-			time.Sleep(1 * time.Second) // Wait before rescanning
-			sdlist, _ = storage.GetStorageDeviceLists()
-			if len(sdlist) > ogListLength {
-				break // New device appeared, exit the loop
+		// Wait for this instance's drive itself to show up. USB enumeration
+		// plus the usb-storage settle delay takes ~6 s after the mux switch;
+		// counting /dev/sd* nodes (the old check) also reacted to partition
+		// and stale nodes and mounted before the drive was there.
+		if _, err := targetInstance.waitForMassStorage(massStorageAppearTimeout); err != nil {
+			msg := "Timeout waiting for the USB drive to appear after switching to KVM side"
+			if devPath, uuid, findErr := storage.FindNewDisk(disksBefore); findErr == nil {
+				msg += fmt.Sprintf(" (a different drive appeared at %s with ID %s; format it from the Storage tab or reconnect the original drive)", devPath, uuid)
 			}
-			rescanCount++
-			if rescanCount > 5 { // Timeout after 5 seconds
-				log.Println("Timeout waiting for mass storage device to appear after switching to KVM side")
-				http.Error(w, "Timeout waiting for mass storage device to appear after switching to KVM side", http.StatusInternalServerError)
-				return
-			}
+			log.Println(msg)
+			http.Error(w, msg, http.StatusInternalServerError)
+			return
 		}
 
 		// Attempt to mount the mass storage device
@@ -119,11 +134,16 @@ func (d *DezkVM) HandleMassStorageSideSwitch(w http.ResponseWriter, r *http.Requ
 		}
 		targetInstance.massStorageMountPoint = mountPoint
 	} else {
-		// If switching to remote side, clear the mount point and unmount if necessary
+		// Unmount before handing the drive to the remote computer. A drive
+		// that is not mounted (mount failed, unformatted drive) must still be
+		// switchable; a busy mount must not be pulled away.
 		err := targetInstance.UnmountMassStorage()
+		if errors.Is(err, errMassStorageNotMounted) {
+			err = nil
+		}
 		if err != nil {
-			log.Println("Failed to unmount mass storage after switching to remote side:", err)
-			http.Error(w, "Failed to unmount mass storage after switching to remote side: "+err.Error(), http.StatusInternalServerError)
+			log.Println("Failed to unmount mass storage before switching to remote side:", err)
+			http.Error(w, "Failed to unmount the USB drive (is a file still open?): "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
@@ -870,11 +890,7 @@ func remountDevice(devPath, mountPoint string) error {
 		return nil
 	}
 
-	cmd := exec.Command("mount", mountTarget, mountPoint)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("mount %s → %s: %w — %s", mountTarget, mountPoint, err, strings.TrimSpace(string(out)))
-	}
-	return nil
+	return storage.MountDevice(mountTarget, mountPoint)
 }
 
 // ---------------------------------------------------------------------------
@@ -1177,24 +1193,21 @@ func (d *DezkVM) HandleATXTrigger(w http.ResponseWriter, r *http.Request, instan
 		return
 	}
 
-	press := mcu.PressPowerButton
-	release := mcu.ReleasePowerButton
+	// The firmware times the press and releases the button by itself, so a
+	// crash or disconnect here can never leave the button held down.
+	pulse := mcu.PulsePowerButton
 	if req.Action == "reset_click" {
-		press = mcu.PressResetButton
-		release = mcu.ReleaseResetButton
+		pulse = mcu.PulseResetButton
 	}
 
-	if err := press(); err != nil {
-		// Try to release in case the press command partially registered.
-		_ = release()
+	if err := pulse(holdDuration); err != nil {
+		// Make sure nothing stays pressed if the command partially registered.
+		_ = mcu.ReleaseButtons()
 		http.Error(w, "Failed to press button: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// Keep the request open until the press is over, as before
 	time.Sleep(holdDuration)
-	if err := release(); err != nil {
-		http.Error(w, "Failed to release button (check the KVM unit): "+err.Error(), http.StatusInternalServerError)
-		return
-	}
 
 	log.Printf("ATX action %s executed on instance %s\n", req.Action, instanceUuid)
 	w.Header().Set("Content-Type", "application/json")

@@ -34,13 +34,7 @@ func (c *Controller) MouseMoveAbsolute(xLSB, xMSB, yLSB, yMSB uint8) ([]byte, er
 		return nil, errors.New("failed to write packet to buffer")
 	}
 
-	err := c.Send(buf.Bytes())
-	if err != nil {
-		return nil, errors.New("failed to send mouse move command: " + err.Error())
-	}
-
-	// Wait for a reply from the device
-	return c.WaitForReply(0x04)
+	return c.transact(buf.Bytes(), 0x04, hidReplyTimeout)
 }
 
 func (c *Controller) MouseMoveRelative(dx, dy, wheel uint8) ([]byte, error) {
@@ -68,12 +62,7 @@ func (c *Controller) MouseMoveRelative(dx, dy, wheel uint8) ([]byte, error) {
 		return nil, errors.New("failed to write packet to buffer")
 	}
 
-	err := c.Send(buf.Bytes())
-	if err != nil {
-		return nil, errors.New("failed to send mouse move relative command: " + err.Error())
-	}
-
-	return c.WaitForReply(0x05)
+	return c.transact(buf.Bytes(), 0x05, hidReplyTimeout)
 }
 
 // Handle mouse button press events

@@ -14,6 +14,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -56,22 +57,37 @@ type SizeInfo struct {
 //go:embed stream_takeover.jpg
 var endOfStreamJPG []byte
 
-// start video capture
+// StartVideoCapture starts the video capture. Once started, the capture is
+// supervised: if the capture device is lost (for example a USB glitch drops
+// the capture card) it is restarted automatically with the same settings
+// until StopVideoCapture or Close is called.
 func (i *Instance) StartVideoCapture(openWithResolution *CaptureResolution) error {
+	i.capMu.Lock()
+	defer i.capMu.Unlock()
+
+	if err := i.startVideoCaptureLocked(openWithResolution); err != nil {
+		return err
+	}
+	i.wantCapture = true
+	return nil
+}
+
+// startVideoCaptureLocked opens the device and starts the capture. The caller must hold capMu.
+func (i *Instance) startVideoCaptureLocked(openWithResolution *CaptureResolution) error {
 	if i.Capturing {
 		return fmt.Errorf("video capture already started")
 	}
 
+	if openWithResolution == nil {
+		return fmt.Errorf("resolution not provided")
+	}
 	if openWithResolution.FPS == 0 {
 		openWithResolution.FPS = 25 //Default to 25 FPS
 	}
 
 	devName := i.Config.VideoDeviceName
-	if openWithResolution == nil {
-		return fmt.Errorf("resolution not provided")
-	}
 	frameRate := openWithResolution.FPS
-	buffSize := 2 //No. of frames to buffer
+	buffSize := 4 //No. of frames to buffer, 2 is too few for the capture card to always have a free buffer
 	//Default to MJPEG
 	//Other formats that are commonly supported are YUYV, H264, MJPEG
 	format := "mjpeg"
@@ -136,6 +152,8 @@ func (i *Instance) StartVideoCapture(openWithResolution *CaptureResolution) erro
 	// set device format
 	currFmt, err := camera.GetPixFormat()
 	if err != nil {
+		camera.Close()
+		i.camera = nil
 		return fmt.Errorf("failed to get current pixel format: %w", err)
 	}
 
@@ -158,16 +176,107 @@ func (i *Instance) StartVideoCapture(openWithResolution *CaptureResolution) erro
 	// start capture
 	ctx, cancel := context.WithCancel(context.TODO())
 	if err := camera.Start(ctx); err != nil {
-		log.Fatalf("stream capture: %s", err)
+		cancel()
+		camera.Close()
+		i.camera = nil
+		return fmt.Errorf("stream capture: %w", err)
 	}
 	i.cameraStartContext = cancel
 
-	// video stream
-	i.frames_buff = camera.GetOutput()
+	// Consumers read from one channel that outlives any single camera, so a
+	// stream that is already open resumes by itself after a restart.
+	if i.frameCh == nil {
+		i.frameCh = make(chan []byte, buffSize)
+	}
+	i.frames_buff = i.frameCh
+	for drained := false; !drained; { // drop frames left over from a previous camera
+		select {
+		case <-i.frameCh:
+		default:
+			drained = true
+		}
+	}
+	go i.pumpFrames(camera, ctx)
 
 	log.Printf("device capture started (buffer size set %d)", camera.BufferCount())
+	i.lastRes = *openWithResolution
 	i.Capturing = true
 	return nil
+}
+
+// pumpFrames forwards the camera's frames to the stable frame channel until the
+// camera's capture loop ends. If that was not requested (the device failed), it
+// starts the recovery.
+func (i *Instance) pumpFrames(camera *device.Device, ctx context.Context) {
+	for frame := range camera.GetOutput() {
+		select {
+		case i.frameCh <- frame:
+		default:
+			// Nobody is keeping up (or nobody is watching). Drop the oldest
+			// frame instead of stalling the camera, a stale frame is worthless.
+			select {
+			case <-i.frameCh:
+			default:
+			}
+			select {
+			case i.frameCh <- frame:
+			default:
+			}
+		}
+	}
+
+	if ctx.Err() != nil {
+		return // stopped on purpose
+	}
+	log.Printf("video capture device lost: %v", camera.StreamError())
+	i.recoverCapture(camera)
+}
+
+// recoverCapture tears down a failed camera and keeps trying to restart the
+// capture with the last used settings until it works or capture is stopped.
+func (i *Instance) recoverCapture(failed *device.Device) {
+	i.capMu.Lock()
+	if i.camera != failed || !i.wantCapture {
+		i.capMu.Unlock() // already stopped or replaced by someone else
+		return
+	}
+	i.Capturing = false
+	i.cameraStartContext()
+	if err := failed.Close(); err != nil {
+		log.Printf("closing the lost capture device: %v", err)
+	}
+	i.camera = nil
+	res := i.lastRes
+	i.capMu.Unlock()
+
+	backoff := time.Second
+	for attempt := 1; ; attempt++ {
+		time.Sleep(backoff)
+		if backoff < 5*time.Second {
+			backoff += time.Second
+		}
+
+		i.capMu.Lock()
+		if !i.wantCapture || i.camera != nil {
+			i.capMu.Unlock() // capture was stopped, or restarted by someone else
+			return
+		}
+		if _, err := os.Stat(i.Config.VideoDeviceName); err != nil {
+			i.capMu.Unlock()
+			if attempt == 1 || attempt%10 == 0 {
+				log.Printf("waiting for %s to come back (attempt %d)", i.Config.VideoDeviceName, attempt)
+			}
+			continue
+		}
+		retry := res
+		err := i.startVideoCaptureLocked(&retry)
+		i.capMu.Unlock()
+		if err == nil {
+			log.Printf("video capture recovered (attempt %d)", attempt)
+			return
+		}
+		log.Printf("video capture restart attempt %d failed: %v", attempt, err)
+	}
 }
 
 // start http service
@@ -183,6 +292,47 @@ func (i *Instance) ServeVideoStream(w http.ResponseWriter, req *http.Request) {
 	err := i.streamMJPEG(w, req, consumer)
 	if err != nil {
 		log.Printf("video stream error: %v", err)
+	}
+}
+
+// badFrameCounter counts empty or corrupted frames and logs a summary at
+// most every 5 seconds instead of one line per frame
+type badFrameCounter struct {
+	count   int
+	lastLog time.Time
+}
+
+func newBadFrameCounter() *badFrameCounter {
+	return &badFrameCounter{lastLog: time.Now()}
+}
+
+func (b *badFrameCounter) add() {
+	b.count++
+	if time.Since(b.lastLog) >= 5*time.Second {
+		log.Printf("skipped %d empty or corrupted frames in the last %v (the capture card returned incomplete buffers)", b.count, time.Since(b.lastLog).Round(time.Second))
+		b.count = 0
+		b.lastLog = time.Now()
+	}
+}
+
+// latestFrame drains the frames already waiting in ch and returns the newest
+// valid one, or frame if none of the waiting frames is valid. Frames that are
+// already queued are stale, sending them only adds latency.
+func latestFrame(frame []byte, ch <-chan []byte, badFrames *badFrameCounter) []byte {
+	for {
+		select {
+		case f, ok := <-ch:
+			if !ok {
+				return frame
+			}
+			if isJPEG(f) {
+				frame = f
+			} else if badFrames != nil {
+				badFrames.add()
+			}
+		default:
+			return frame
+		}
 	}
 }
 
@@ -222,30 +372,24 @@ func (i *Instance) streamMJPEG(w http.ResponseWriter, req *http.Request, consume
 	var frame []byte
 	var partWriter io.Writer
 	var err error
-	for frame = range i.frames_buff {
+	badFrames := newBadFrameCounter()
+	for {
+		// Wait for the next frame, but stay responsive to the client leaving or a takeover.
+		// While the capture device is being recovered no frames arrive for a few seconds.
 		select {
 		case <-req.Context().Done():
 			return nil
 		case <-consumer.takeover:
 			return writeTakeoverFrame(mimeWriter)
-		default:
+		case frame = <-i.frames_buff:
 		}
 
-		// Drain 2 frames every frame if there are buffered frames
-		// This helps in reducing latency when the network is congested
-		select {
-		case f := <-i.frames_buff:
-			frame = f
-		default:
-		}
-
-		if len(frame) == 0 {
-			log.Print("skipping empty frame")
-			continue
-		}
+		// Skip to the newest frame to keep latency low when the network is congested
+		frame = latestFrame(frame, i.frames_buff, badFrames)
 
 		if !isJPEG(frame) {
-			// Corrupted frame, skip it
+			// Empty (incomplete buffer from the capture card) or corrupted frame
+			badFrames.add()
 			continue
 		}
 
@@ -309,7 +453,6 @@ func (i *Instance) streamMJPEG(w http.ResponseWriter, req *http.Request, consume
 		}
 
 	}
-	return nil
 }
 
 func writeTakeoverFrame(mimeWriter *multipart.Writer) error {
@@ -326,8 +469,16 @@ func writeTakeoverFrame(mimeWriter *multipart.Writer) error {
 	return nil
 }
 
-// StopVideoCapture stops the video capture and closes the camera device
+// StopVideoCapture stops the video capture and closes the camera device.
+// It also cancels any automatic recovery in progress.
 func (i *Instance) StopVideoCapture() error {
+	i.capMu.Lock()
+	defer i.capMu.Unlock()
+	i.wantCapture = false
+	return i.stopVideoCaptureLocked()
+}
+
+func (i *Instance) stopVideoCaptureLocked() error {
 	if i.camera != nil {
 		i.cameraStartContext()
 		err := i.camera.Close()
